@@ -25,3 +25,4 @@ server for `/api/*` and video preview routes.
 - Writes `output/timeline.json` and `output/edit_list.csv`.
 
 If `input/voice.wav` exists, it is attached to the rendered video.
+"# picoedit" 
