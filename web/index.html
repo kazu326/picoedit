@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>picoedit</title>
+    <script>
+      if (window.location.protocol === "file:") {
+        window.location.replace("http://127.0.0.1:8765/");
+      }
+    </script>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>picoedit</h1>
+          <p id="projectStatus">読み込み中</p>
+        </div>
+        <div class="toolbar">
+          <select id="templateSelect" aria-label="テンプレート"></select>
+          <button id="reloadButton" type="button" title="再読込">再読込</button>
+          <button id="saveButton" type="button" title="テンプレート保存">保存</button>
+          <button id="renderButton" class="primary" type="button" title="ラフカット生成">生成</button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="panel preview-panel">
+          <div class="panel-head">
+            <h2>プレビュー</h2>
+            <span id="outputMeta">-</span>
+          </div>
+          <div class="preview-frame">
+            <video id="previewVideo" controls playsinline preload="metadata"></video>
+            <div id="emptyPreview" class="empty-preview">output/rough_cut.mp4</div>
+          </div>
+        </section>
+
+        <section class="panel template-panel">
+          <div class="panel-head">
+            <h2>テンプレート</h2>
+            <div class="template-fields">
+              <label>
+                ID
+                <input id="templateId" type="text">
+              </label>
+              <label>
+                サイズ
+                <input id="outputSize" type="text">
+              </label>
+              <label>
+                FPS
+                <input id="fps" type="number" min="1" step="1">
+              </label>
+            </div>
+          </div>
+          <div class="slot-table-wrap">
+            <table class="slot-table">
+              <thead>
+                <tr>
+                  <th>slot</th>
+                  <th>label</th>
+                  <th>folder</th>
+                  <th>sec</th>
+                  <th>selected asset</th>
+                  <th>preview</th>
+                  <th>change</th>
+                </tr>
+              </thead>
+              <tbody id="slotRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel timeline-panel">
+          <div class="panel-head">
+            <h2>タイムライン</h2>
+            <span id="timelineMeta">-</span>
+          </div>
+          <div id="timelineRows" class="timeline-rows"></div>
+        </section>
+
+        <section class="panel assets-panel">
+          <div class="panel-head">
+            <h2>素材</h2>
+            <span id="assetMeta">-</span>
+          </div>
+          <div id="assetFolders" class="asset-folders"></div>
+        </section>
+
+        <section class="panel log-panel">
+          <div class="panel-head">
+            <h2>ログ</h2>
+            <button id="clearLogButton" type="button" title="ログを消去">消去</button>
+          </div>
+          <pre id="logOutput"></pre>
+        </section>
+      </main>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>

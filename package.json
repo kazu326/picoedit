@@ -1,0 +1,12 @@
+{
+  "name": "picoedit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local rough-cut web app for vertical short videos.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
