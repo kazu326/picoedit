@@ -1,0 +1,9 @@
+# Local FFmpeg binaries are too large for GitHub's 100 MB file limit.
+tools/ffmpeg/bin/*.exe
+
+# Generated render outputs.
+output/*.mp4
+
+# Python cache files.
+__pycache__/
+*.py[cod]

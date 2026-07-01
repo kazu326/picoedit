@@ -25,4 +25,10 @@ server for `/api/*` and video preview routes.
 - Writes `output/timeline.json` and `output/edit_list.csv`.
 
 If `input/voice.wav` exists, it is attached to the rendered video.
+
+## FFmpeg
+
+The local app expects `ffmpeg` and `ffprobe` to be available either on `PATH` or
+in `tools/ffmpeg/bin/`. The `.exe` files are intentionally ignored because they
+exceed GitHub's 100 MB file limit.
 "# picoedit" 
