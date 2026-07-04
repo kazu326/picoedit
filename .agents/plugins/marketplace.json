@@ -1,0 +1,20 @@
+{
+  "name": "picoedit-local",
+  "interface": {
+    "displayName": "PicoEdit Local"
+  },
+  "plugins": [
+    {
+      "name": "picoedit-plugin",
+      "source": {
+        "source": "local",
+        "path": "./plugins/picoedit-plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

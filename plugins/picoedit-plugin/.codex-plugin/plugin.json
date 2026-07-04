@@ -1,0 +1,25 @@
+{
+  "name": "picoedit-plugin",
+  "version": "0.1.0",
+  "description": "Beginner-friendly PicoEdit setup, asset catalog, and local build assistance for Codex.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "PicoEdit Plugin",
+    "shortDescription": "Operate PicoEdit setup, assets, and builds.",
+    "longDescription": "Helps Codex prepare PicoEdit for beginners, read the Cloudflare R2 asset catalog, and guide local rough-cut workflows without exposing command-line details.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [
+      "Local Files",
+      "Automation"
+    ],
+    "defaultPrompt": [
+      "PicoEditの素材カタログを確認して",
+      "PicoEditの初期設定を確認して",
+      "PicoEditのラフカット生成を手伝って"
+    ]
+  }
+}
