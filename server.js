@@ -14,8 +14,15 @@ const OUTPUT_DIR = path.join(PROJECT_ROOT, "output");
 const TEMPLATE_DIR = path.join(PROJECT_ROOT, "templates");
 const ASSET_DIR = path.join(PROJECT_ROOT, "assets");
 const INPUT_DIR = path.join(PROJECT_ROOT, "input");
+const CONFIG_DIR = path.join(PROJECT_ROOT, "config");
+const SETTINGS_PATH = path.join(CONFIG_DIR, "settings.json");
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".mkv"]);
 const PORT = Number(process.env.PORT || 8765);
+const ASSET_CATALOG_URL = "https://pub-78d5d49156194b43ae62cc67bd6faf88.r2.dev/asset_catalog.json";
+const ASSET_CATALOG_HOST = "pub-78d5d49156194b43ae62cc67bd6faf88.r2.dev";
+const ASSET_CATALOG_PATH = "/asset_catalog.json";
+const ASSET_CATALOG_TIMEOUT_MS = 8000;
+const ASSET_CATALOG_MAX_BYTES = 1024 * 1024;
 
 let renderInProgress = false;
 
@@ -48,6 +55,122 @@ function ffmpegPath(name) {
     return bundled;
   }
   return exe;
+}
+
+function defaultSettings() {
+  return {
+    asset_catalog_url: ASSET_CATALOG_URL,
+  };
+}
+
+function assertAllowedAssetCatalogUrl(value) {
+  let parsed;
+  try {
+    parsed = new URL(String(value || ""));
+  } catch {
+    throw new Error("素材カタログURLの形式が正しくありません。");
+  }
+
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.hostname !== ASSET_CATALOG_HOST ||
+    parsed.pathname !== ASSET_CATALOG_PATH ||
+    parsed.search ||
+    parsed.hash ||
+    parsed.href !== ASSET_CATALOG_URL
+  ) {
+    throw new Error("このバージョンでは指定された素材カタログURLだけを利用できます。");
+  }
+  return parsed.href;
+}
+
+async function readSettings() {
+  await fsp.mkdir(CONFIG_DIR, { recursive: true });
+  if (!fs.existsSync(SETTINGS_PATH)) {
+    const settings = defaultSettings();
+    await writeSettings(settings);
+    return settings;
+  }
+
+  const rawSettings = JSON.parse(await fsp.readFile(SETTINGS_PATH, "utf8"));
+  const settings = {
+    ...defaultSettings(),
+    ...(rawSettings && typeof rawSettings === "object" && !Array.isArray(rawSettings) ? rawSettings : {}),
+  };
+  settings.asset_catalog_url = assertAllowedAssetCatalogUrl(settings.asset_catalog_url);
+  return settings;
+}
+
+async function writeSettings(settings) {
+  const cleanSettings = {
+    asset_catalog_url: assertAllowedAssetCatalogUrl(settings.asset_catalog_url),
+  };
+  await fsp.mkdir(CONFIG_DIR, { recursive: true });
+  await fsp.writeFile(SETTINGS_PATH, `${JSON.stringify(cleanSettings, null, 2)}\n`, "utf8");
+  return cleanSettings;
+}
+
+async function readResponseTextWithLimit(response, maxBytes) {
+  const reader = response.body?.getReader?.();
+  if (!reader) {
+    const text = await response.text();
+    if (Buffer.byteLength(text, "utf8") > maxBytes) {
+      throw new Error("素材カタログの形式が正しくありません。管理者に連絡してください");
+    }
+    return text;
+  }
+
+  const chunks = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    totalBytes += value.byteLength;
+    if (totalBytes > maxBytes) {
+      throw new Error("素材カタログの形式が正しくありません。管理者に連絡してください");
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+async function fetchAssetCatalog(settings = null) {
+  const activeSettings = settings || (await readSettings());
+  const catalogUrl = assertAllowedAssetCatalogUrl(activeSettings.asset_catalog_url);
+  let response;
+  try {
+    response = await fetch(catalogUrl, {
+      signal: AbortSignal.timeout(ASSET_CATALOG_TIMEOUT_MS),
+    });
+  } catch {
+    throw new Error("素材カタログに接続できません。ネット接続と配布URLを確認してください");
+  }
+
+  if (!response.ok) {
+    throw new Error("素材カタログに接続できません。ネット接続と配布URLを確認してください");
+  }
+
+  let catalog;
+  try {
+    catalog = JSON.parse(await readResponseTextWithLimit(response, ASSET_CATALOG_MAX_BYTES));
+  } catch (error) {
+    if (String(error.message || "").startsWith("素材カタログ")) {
+      throw error;
+    }
+    throw new Error("素材カタログの形式が正しくありません。管理者に連絡してください");
+  }
+
+  if (!catalog || typeof catalog !== "object" || Array.isArray(catalog) || !Array.isArray(catalog.packs)) {
+    throw new Error("素材カタログの形式が正しくありません。管理者に連絡してください");
+  }
+
+  return {
+    ...catalog,
+    packs: catalog.packs,
+    message: catalog.packs.length ? `${catalog.packs.length}件の素材パックがあります` : "利用可能な素材パックはありません",
+  };
 }
 
 async function runCommand(command, args, context) {
@@ -563,6 +686,23 @@ async function serveFile(request, response, filePath) {
 async function handleApi(request, response, url) {
   if (url.pathname === "/api/health") {
     sendJson(response, 200, { ok: true });
+    return;
+  }
+  if (url.pathname === "/api/settings" && request.method === "GET") {
+    sendJson(response, 200, { settings: await readSettings() });
+    return;
+  }
+  if (url.pathname === "/api/settings" && request.method === "PUT") {
+    try {
+      const body = await readRequestBody(request);
+      sendJson(response, 200, { settings: await writeSettings(body.settings || body) });
+    } catch (error) {
+      sendJson(response, 400, { error: error.message });
+    }
+    return;
+  }
+  if (url.pathname === "/api/asset-catalog" && request.method === "GET") {
+    sendJson(response, 200, await fetchAssetCatalog());
     return;
   }
   if (url.pathname === "/api/state") {
