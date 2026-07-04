@@ -3,6 +3,11 @@ tools/ffmpeg/bin/*.exe
 
 # Generated render outputs.
 output/*.mp4
+output/*.zip
+output/selected_assets/
+output/selected_clips/
+output/selection.json
+output/rough_cut_edit_list.csv
 
 # Python cache files.
 __pycache__/
