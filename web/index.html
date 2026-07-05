@@ -22,7 +22,8 @@
           <select id="templateSelect" aria-label="テンプレート"></select>
           <button id="reloadButton" type="button" title="再読込">再読込</button>
           <button id="saveButton" type="button" title="テンプレート保存">保存</button>
-          <button id="renderButton" class="primary" type="button" title="ラフカット生成">生成</button>
+          <button id="renderButton" type="button" title="旧テンプレート方式。音声タイムラインは使いません。">旧テンプレート生成</button>
+          <button id="timelineRenderButton" class="primary" type="button" title="音声・字幕タイムラインと役割別素材からラフカットを生成">音声タイムライン生成</button>
         </div>
       </header>
 
@@ -40,7 +41,7 @@
 
         <section class="panel template-panel">
           <div class="panel-head">
-            <h2>テンプレート</h2>
+            <h2>旧テンプレート設定</h2>
             <div class="template-fields">
               <label>
                 ID
@@ -76,8 +77,11 @@
 
         <section class="panel timeline-panel">
           <div class="panel-head">
-            <h2>タイムライン</h2>
-            <span id="timelineMeta">-</span>
+            <div>
+              <h2>音声タイムライン・ラフカット</h2>
+              <span id="timelineMeta">-</span>
+            </div>
+            <span id="timelinePipelineMeta">timeline_with_captions.json → 素材 → rough_cut.mp4</span>
           </div>
           <div id="timelineRows" class="timeline-rows"></div>
         </section>
