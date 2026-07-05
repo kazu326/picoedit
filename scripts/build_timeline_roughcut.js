@@ -1,726 +1,311 @@
-#!/usr/bin/env node
-"use strict";
+const fs = require("fs");
+const path = require("path");
+const { spawnSync } = require("child_process");
 
-/**
- * PicoEdit timeline-driven rough-cut renderer.
- *
- * Inputs (existing pipeline; never overwritten):
- *   - output/timeline_with_captions.json
- *   - input/voice.mp3
- *   - asset_manifest.json (auto-discovered under project root/assets/output/config)
- *
- * Outputs:
- *   - output/rough_cut.mp4
- *   - output/rough_cut_plan.json
- *   - output/rough_cut_subtitles.ass
- *   - output/asset_manifest_check.json
- */
+const rootDir = path.resolve(__dirname, "..");
+const outputDir = path.join(rootDir, "output");
+const timelinePath = path.join(outputDir, "timeline_with_captions.json");
+const manifestPath = path.resolve(rootDir, process.env.ASSET_MANIFEST_PATH || "output/asset_manifest_for_renderer.json");
+const audioPath = path.join(rootDir, "input", "voice.mp3");
+const planPath = path.join(outputDir, "rough_cut_plan.json");
+const roughCutPath = path.join(outputDir, "rough_cut.mp4");
+const captionsPath = path.join(outputDir, "rough_cut_captions.ass");
+const selectedClipsDir = path.join(outputDir, "selected_clips");
+const ffmpegPath = path.join(rootDir, "tools", "ffmpeg", "bin", "ffmpeg.exe");
+const ffprobePath = path.join(rootDir, "tools", "ffmpeg", "bin", "ffprobe.exe");
+const rolePlan = ["hook", "problem", "explain", "explain", "proof", "explain", "cta"];
 
-const fs = require("node:fs");
-const fsp = require("node:fs/promises");
-const path = require("node:path");
-const os = require("node:os");
-const { execFile } = require("node:child_process");
-const { promisify } = require("node:util");
-
-const execFileAsync = promisify(execFile);
-
-const ROOT = path.resolve(__dirname, "..");
-const INPUT_DIR = path.join(ROOT, "input");
-const OUTPUT_DIR = path.join(ROOT, "output");
-const ASSET_DIR = path.join(ROOT, "assets");
-const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".mkv"]);
-const FPS = numberEnv("ROUGH_CUT_FPS", 30);
-const [WIDTH, HEIGHT] = parseOutputSize(process.env.ROUGH_CUT_SIZE || "1080x1920");
-const SHORT_ASSET_SLOWDOWN_THRESHOLD = 0.85;
-
-function numberEnv(name, fallback) {
-  const value = Number.parseFloat(process.env[name] || "");
-  return Number.isFinite(value) && value > 0 ? value : fallback;
+function fail(message) {
+  console.error(message);
+  process.exit(1);
 }
 
-function parseOutputSize(value) {
-  const [widthText, heightText] = String(value).toLowerCase().split("x");
-  const width = Number.parseInt(widthText, 10);
-  const height = Number.parseInt(heightText, 10);
-  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
-    throw new Error(`ROUGH_CUT_SIZE must be like 1080x1920. Received: ${value}`);
-  }
-  return [width, height];
-}
-
-function ffmpegPath(name) {
-  const exe = process.platform === "win32" ? `${name}.exe` : name;
-  const bundled = path.join(ROOT, "tools", "ffmpeg", "bin", exe);
-  return fs.existsSync(bundled) ? bundled : exe;
-}
-
-function projectPath(filePath) {
-  return path.relative(ROOT, filePath).split(path.sep).join("/");
-}
-
-function assertInsideRoot(filePath, root = ROOT) {
-  const resolved = path.resolve(filePath);
-  const resolvedRoot = path.resolve(root);
-  if (resolved !== resolvedRoot && !resolved.startsWith(`${resolvedRoot}${path.sep}`)) {
-    throw new Error(`Path is outside the permitted root: ${filePath}`);
-  }
-  return resolved;
-}
-
-function resolveProjectFile(value, label) {
-  if (!value) {
-    throw new Error(`${label} path is empty.`);
-  }
-  const resolved = path.isAbsolute(value) ? path.resolve(value) : path.resolve(ROOT, value);
-  return assertInsideRoot(resolved);
-}
-
-function isVideo(filePath) {
-  return VIDEO_EXTENSIONS.has(path.extname(filePath).toLowerCase());
-}
-
-async function runCommand(command, args, context) {
+function readJson(filePath) {
   try {
-    return await execFileAsync(command, args, {
-      cwd: ROOT,
-      windowsHide: true,
-      maxBuffer: 1024 * 1024 * 80,
-    });
+    return JSON.parse(fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""));
   } catch (error) {
-    const output = `${error.stderr || ""}${error.stdout || ""}`.trim();
-    throw new Error(`${context} failed:\n${output || error.message}`);
+    fail(`${filePath} を読み込めません: ${error.message}`);
   }
 }
 
-async function probeDuration(filePath) {
-  const ffprobe = ffmpegPath("ffprobe");
-  const result = await runCommand(
-    ffprobe,
-    [
-      "-v", "error",
-      "-show_entries", "format=duration",
-      "-of", "default=noprint_wrappers=1:nokey=1",
-      filePath,
-    ],
-    `ffprobe for ${projectPath(filePath)}`
-  );
-  const duration = Number.parseFloat(result.stdout.trim());
-  if (!Number.isFinite(duration) || duration <= 0) {
-    throw new Error(`Could not read a positive duration: ${projectPath(filePath)}`);
-  }
-  return duration;
-}
-
-function firstExisting(candidates, label) {
-  for (const candidate of candidates.filter(Boolean)) {
-    const resolved = resolveProjectFile(candidate, label);
-    if (fs.existsSync(resolved)) {
-      return resolved;
-    }
-  }
-  throw new Error(`${label} was not found. Checked:\n${candidates.filter(Boolean).join("\n")}`);
-}
-
-function readJson(filePath, label) {
-  try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
-  } catch (error) {
-    throw new Error(`${label} is not valid JSON: ${projectPath(filePath)}\n${error.message}`);
-  }
-}
-
-function pickFirst(...values) {
-  return values.find((value) => value !== undefined && value !== null && value !== "") ?? null;
-}
-
-function toArray(value) {
-  if (Array.isArray(value)) return value;
-  if (value === undefined || value === null || value === "") return [];
-  return [value];
-}
-
-function splitRoleTokens(value) {
-  return toArray(value)
-    .flatMap((item) => String(item).split(/[\\/|,\s]+/))
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-function canonicalRole(value) {
-  const token = String(value || "").trim().toLowerCase();
-  const aliases = {
-    hook: "hook",
-    intro: "hook",
-    opening: "hook",
-    problem: "problem",
-    pain: "problem",
-    issue: "problem",
-    explain: "explain",
-    explanation: "explain",
-    body: "explain",
-    education: "explain",
-    proof: "proof",
-    example: "proof",
-    result: "proof",
-    evidence: "proof",
-    cta: "cta",
-    closing: "cta",
-    outro: "cta",
-  };
-  return aliases[token] || null;
-}
-
-function extractManifestRows(rawManifest) {
-  if (Array.isArray(rawManifest)) return rawManifest;
-  if (!rawManifest || typeof rawManifest !== "object") return [];
-
-  for (const key of ["assets", "files", "items", "videos", "entries", "media"]) {
-    if (Array.isArray(rawManifest[key])) return rawManifest[key];
-  }
-
-  // Accept object maps: { "assets/hook/a.mp4": { ...metadata } }
-  const values = Object.entries(rawManifest)
-    .filter(([, value]) => value && typeof value === "object" && !Array.isArray(value))
-    .map(([key, value]) => ({ path: value.path || key, ...value }));
-  return values;
-}
-
-async function normalizeAssetManifest(rawManifest, manifestPath) {
-  const rows = extractManifestRows(rawManifest);
-  if (!rows.length) {
-    throw new Error(
-      `asset_manifest.json has no readable asset array. Supported top-level keys: assets, files, items, videos, entries, media.\n${projectPath(manifestPath)}`
-    );
-  }
-
-  const assets = [];
-  const skipped = [];
-  for (const row of rows) {
-    const rawPath = typeof row === "string"
-      ? row
-      : pickFirst(row.path, row.file_path, row.relative_path, row.asset_path, row.file, row.source, row.src);
-
-    if (!rawPath) {
-      skipped.push({ reason: "path field missing", row });
-      continue;
-    }
-
-    let filePath;
-    try {
-      filePath = resolveProjectFile(String(rawPath), "Asset");
-    } catch (error) {
-      skipped.push({ reason: error.message, path: rawPath });
-      continue;
-    }
-
-    if (!isVideo(filePath)) {
-      skipped.push({ reason: "not a supported video extension", path: rawPath });
-      continue;
-    }
-    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
-      skipped.push({ reason: "file does not exist", path: rawPath });
-      continue;
-    }
-
-    const folder = projectPath(path.dirname(filePath));
-    const declaredTokens = [
-      ...splitRoleTokens(row?.role),
-      ...splitRoleTokens(row?.roles),
-      ...splitRoleTokens(row?.category),
-      ...splitRoleTokens(row?.categories),
-      ...splitRoleTokens(row?.tags),
-      ...splitRoleTokens(row?.folder),
-      ...splitRoleTokens(folder),
-    ];
-    const roles = [...new Set(declaredTokens.map(canonicalRole).filter(Boolean))];
-
-    assets.push({
-      id: String(pickFirst(row?.id, row?.asset_id, projectPath(filePath))),
-      filePath,
-      projectPath: projectPath(filePath),
-      folder,
-      name: path.basename(filePath),
-      roles,
-      tags: declaredTokens,
-      raw: typeof row === "object" ? row : { path: row },
-    });
-  }
-
-  if (!assets.length) {
-    throw new Error(
-      `No valid videos were found from ${projectPath(manifestPath)}. Check that manifest paths are project-relative, e.g. assets/hook/clip.mp4.`
-    );
-  }
-  return { assets, skipped };
-}
-
-function inferSegmentRole(segment, index, total) {
-  const direct = [
-    segment.role,
-    segment.visual_role,
-    segment.asset_role,
-    segment.category,
-    segment.type,
-    segment.section,
-    segment.folder,
-  ];
-  for (const value of direct) {
-    for (const token of splitRoleTokens(value)) {
-      const role = canonicalRole(token);
-      if (role) return role;
-    }
-  }
-
-  // Only a deterministic fallback. Semantic inference from the spoken text belongs in a later step.
-  if (index === 0) return "hook";
-  if (index === total - 1) return "cta";
-  return "explain";
-}
-
-function normalizeTimeline(rawTimeline) {
-  const rawSegments = Array.isArray(rawTimeline)
-    ? rawTimeline
-    : (rawTimeline?.segments || rawTimeline?.visual_segments || rawTimeline?.timeline || []);
-  const rawCues = rawTimeline?.caption_cues || rawTimeline?.captions || rawTimeline?.cues || [];
-
-  if (!Array.isArray(rawSegments) || !rawSegments.length) {
-    throw new Error("timeline_with_captions.json must contain a non-empty segments array.");
-  }
-  if (!Array.isArray(rawCues)) {
-    throw new Error("timeline_with_captions.json caption_cues must be an array.");
-  }
-
-  const segments = rawSegments.map((segment, index) => {
-    const start = Number(pickFirst(segment.start, segment.start_sec, segment.from));
-    const end = Number(pickFirst(segment.end, segment.end_sec, segment.to));
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
-      throw new Error(`Segment #${index + 1} needs numeric start/end values with end > start.`);
-    }
-    return {
-      ...segment,
-      id: String(pickFirst(segment.id, segment.segment_id, segment.slot_id, `segment_${String(index + 1).padStart(2, "0")}`)),
-      start,
-      end,
-      duration: end - start,
-    };
-  }).sort((a, b) => a.start - b.start);
-
-  const tolerance = 0.08;
-  if (segments[0].start > tolerance) {
-    throw new Error(`First segment starts at ${segments[0].start.toFixed(3)}s, not 0s. Do not silently invent a visual gap.`);
-  }
-  for (let index = 1; index < segments.length; index += 1) {
-    const gap = segments[index].start - segments[index - 1].end;
-    if (Math.abs(gap) > tolerance) {
-      throw new Error(
-        `Segments #${index} and #${index + 1} are not contiguous (${segments[index - 1].end.toFixed(3)}s -> ${segments[index].start.toFixed(3)}s).`
-      );
-    }
-  }
-
-  const captionCues = rawCues.map((cue, index) => {
-    const start = Number(pickFirst(cue.start, cue.start_sec, cue.from));
-    const end = Number(pickFirst(cue.end, cue.end_sec, cue.to));
-    const text = String(pickFirst(cue.text, cue.caption, cue.value, "")).trim();
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || !text) {
-      throw new Error(`caption_cues #${index + 1} needs start/end/text.`);
-    }
-    return { ...cue, start, end, text };
-  }).sort((a, b) => a.start - b.start);
-
-  return { segments, captionCues };
-}
-
-function stableHash(text) {
-  let hash = 2166136261;
-  for (const char of String(text)) {
-    hash ^= char.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-async function assignAssets(segments, assets, warnings) {
-  const durationCache = new Map();
-  const used = new Set();
-
-  async function durationOf(asset) {
-    if (!durationCache.has(asset.filePath)) {
-      durationCache.set(asset.filePath, probeDuration(asset.filePath));
-    }
-    return durationCache.get(asset.filePath);
-  }
-
-  const assignments = [];
-  for (const [index, segment] of segments.entries()) {
-    const role = inferSegmentRole(segment, index, segments.length);
-    const roleMatches = assets.filter((asset) => asset.roles.includes(role));
-    const pool = roleMatches.length ? roleMatches : assets;
-    if (!roleMatches.length) {
-      warnings.push(`Segment '${segment.id}' requested role '${role}', but no manifest asset matched it. Global fallback was used.`);
-    }
-
-    const candidates = [];
-    for (const asset of pool) {
-      const sourceDuration = await durationOf(asset);
-      const ratio = sourceDuration / segment.duration;
-      let fitScore = 0;
-      if (ratio >= 1) fitScore = 30;
-      else if (ratio >= SHORT_ASSET_SLOWDOWN_THRESHOLD) fitScore = 20;
-      else if (ratio >= 0.5) fitScore = 10;
-      const reusePenalty = used.has(asset.filePath) ? -100 : 0;
-      candidates.push({
-        asset,
-        sourceDuration,
-        score: fitScore + reusePenalty,
-        tie: stableHash(`${segment.id}|${asset.projectPath}`),
-      });
-    }
-
-    candidates.sort((a, b) => b.score - a.score || a.tie - b.tie || a.asset.projectPath.localeCompare(b.asset.projectPath));
-    const selected = candidates[0];
-    used.add(selected.asset.filePath);
-
-    assignments.push({
-      ...segment,
-      role,
-      asset: selected.asset,
-      sourceDuration: selected.sourceDuration,
-    });
-  }
-  return assignments;
-}
-
-function framePlan(assignments, voiceDuration) {
-  const finalFrame = Math.max(1, Math.round(voiceDuration * FPS));
-  let priorFrame = 0;
-
-  return assignments.map((assignment, index) => {
-    const desiredEnd = index === assignments.length - 1 ? finalFrame : Math.round(assignment.end * FPS);
-    const endFrame = Math.max(priorFrame + 1, Math.min(finalFrame, desiredEnd));
-    const frameCount = endFrame - priorFrame;
-    const targetDuration = frameCount / FPS;
-    const timelineDuration = assignment.end - assignment.start;
-    const sourceDuration = assignment.sourceDuration;
-
-    let mode;
-    let speed = 1;
-    let sourceOffset = 0;
-    if (sourceDuration >= targetDuration) {
-      mode = "trim";
-      const availableOffset = sourceDuration - targetDuration;
-      if (availableOffset > 0.08) {
-        sourceOffset = (stableHash(`${assignment.id}|${assignment.asset.projectPath}`) / 0xffffffff) * availableOffset;
-      }
-    } else if (sourceDuration / targetDuration >= SHORT_ASSET_SLOWDOWN_THRESHOLD) {
-      mode = "slow_down";
-      speed = sourceDuration / targetDuration;
-    } else {
-      mode = "loop";
-    }
-
-    priorFrame = endFrame;
-    return {
-      ...assignment,
-      frameStart: endFrame - frameCount,
-      frameEnd: endFrame,
-      frameCount,
-      targetDuration,
-      timelineDuration,
-      mode,
-      speed,
-      sourceOffset,
-    };
+function run(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    cwd: options.cwd || rootDir,
+    encoding: "utf8",
+    windowsHide: true,
   });
-}
-
-function videoFilter({ speed, duration }) {
-  const setpts = speed === 1
-    ? "setpts=PTS-STARTPTS"
-    : `setpts=(PTS-STARTPTS)/${speed.toFixed(12)}`;
-  return [
-    setpts,
-    `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase`,
-    `crop=${WIDTH}:${HEIGHT}`,
-    `fps=${FPS}`,
-    `trim=duration=${duration.toFixed(12)}`,
-    "setpts=PTS-STARTPTS",
-    "setsar=1",
-  ].join(",");
-}
-
-async function renderVisualSegment(plan, destination) {
-  const ffmpeg = ffmpegPath("ffmpeg");
-  const args = ["-y"];
-
-  if (plan.mode === "trim" && plan.sourceOffset > 0.001) {
-    args.push("-ss", plan.sourceOffset.toFixed(6));
+  if (result.status !== 0) {
+    fail(`${path.basename(command)} の実行に失敗しました。\n${result.stderr || result.stdout}`);
   }
-  if (plan.mode === "loop") {
-    args.push("-stream_loop", "-1");
+  return result.stdout.trim();
+}
+
+function rel(filePath) {
+  return path.relative(rootDir, filePath).split(path.sep).join("/");
+}
+
+function round(value) {
+  return Number(Number(value).toFixed(6));
+}
+
+function secondsToAssTime(value) {
+  const totalCentiseconds = Math.round(Number(value) * 100);
+  const hours = Math.floor(totalCentiseconds / 360000);
+  const minutes = Math.floor((totalCentiseconds % 360000) / 6000);
+  const seconds = Math.floor((totalCentiseconds % 6000) / 100);
+  const centiseconds = totalCentiseconds % 100;
+  return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(centiseconds).padStart(2, "0")}`;
+}
+
+function escapeAssText(text) {
+  return String(text || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\{/g, "\\{")
+    .replace(/\}/g, "\\}");
+}
+
+function writeCaptionAss(cues) {
+  if (!Array.isArray(cues) || cues.length === 0) {
+    return null;
   }
-  args.push(
-    "-i", plan.asset.filePath,
-    "-an",
-    "-vf", videoFilter({ speed: plan.speed, duration: plan.targetDuration }),
-    "-frames:v", String(plan.frameCount),
-    "-c:v", "libx264",
-    "-preset", "medium",
-    "-crf", "18",
-    "-pix_fmt", "yuv420p",
-    "-movflags", "+faststart",
-    destination
-  );
-  await runCommand(ffmpeg, args, `Rendering ${plan.id}`);
-}
-
-function concatLine(filePath) {
-  const escaped = path.resolve(filePath).split(path.sep).join("/").replaceAll("'", "'\\''");
-  return `file '${escaped}'`;
-}
-
-function assTime(seconds) {
-  const total = Math.max(0, Math.round(seconds * 100));
-  const centiseconds = total % 100;
-  const totalSeconds = Math.floor(total / 100);
-  const secondsPart = totalSeconds % 60;
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  const minutes = totalMinutes % 60;
-  const hours = Math.floor(totalMinutes / 60);
-  return `${hours}:${String(minutes).padStart(2, "0")}:${String(secondsPart).padStart(2, "0")}.${String(centiseconds).padStart(2, "0")}`;
-}
-
-function escapeAssText(text, maxChars = 13) {
-  const compact = String(text).replace(/\r?\n/g, "").trim()
-    .replaceAll("\\", "\\\\")
-    .replaceAll("{", "\\{")
-    .replaceAll("}", "\\}");
-  const chunks = [];
-  for (let index = 0; index < compact.length; index += maxChars) {
-    chunks.push(compact.slice(index, index + maxChars));
-  }
-  return chunks.join("\\N");
-}
-
-async function writeAss(captionCues, voiceDuration, assPath) {
-  const header = [
+  const events = cues.map((cue) => {
+    const lines = Array.isArray(cue.lines) && cue.lines.length > 0 ? cue.lines.slice(0, 2) : [cue.text || ""];
+    const text = lines.map(escapeAssText).join("\\N");
+    return `Dialogue: 0,${secondsToAssTime(cue.start)},${secondsToAssTime(cue.end)},Caption,,0,0,0,,${text}`;
+  });
+  const ass = [
     "[Script Info]",
     "ScriptType: v4.00+",
-    `PlayResX: ${WIDTH}`,
-    `PlayResY: ${HEIGHT}`,
+    "WrapStyle: 0",
     "ScaledBorderAndShadow: yes",
+    "PlayResX: 1080",
+    "PlayResY: 1920",
     "",
     "[V4+ Styles]",
-    "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding",
-    `Style: Caption,${process.env.SUBTITLE_FONT || "Meiryo"},72,&H00FFFFFF,&H000000FF,&H00101010,&H70000000,1,0,0,0,100,100,0,0,1,7,1,2,60,60,270,1`,
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    "Style: Caption,Yu Gothic UI,68,&H00FFFFFF,&H000000FF,&H00101010,&H99000000,-1,0,0,0,100,100,0,0,1,5,1,2,90,90,250,1",
     "",
     "[Events]",
-    "Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text",
-  ];
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ...events,
+    "",
+  ].join("\r\n");
+  fs.writeFileSync(captionsPath, ass, "utf8");
+  return captionsPath;
+}
 
-  const lines = captionCues
-    .filter((cue) => cue.start < voiceDuration)
-    .map((cue) => {
-      const end = Math.min(cue.end, voiceDuration);
-      return `Dialogue: 0,${assTime(cue.start)},${assTime(end)},Caption,,0,0,0,,${escapeAssText(cue.text)}`;
+function pickAsset(videos, role, used, targetDuration) {
+  const candidates = videos
+    .filter((video) => video.role === role && video.exists && !used.has(video.path))
+    .sort((a, b) => {
+      const aCovers = Number(a.duration) >= targetDuration ? 0 : 1;
+      const bCovers = Number(b.duration) >= targetDuration ? 0 : 1;
+      if (aCovers !== bCovers) return aCovers - bCovers;
+      return Math.abs(Number(a.duration) - targetDuration) - Math.abs(Number(b.duration) - targetDuration);
     });
-
-  await fsp.writeFile(assPath, `${[...header, ...lines].join("\n")}\n`, "utf8");
+  if (!candidates.length) {
+    fail(`${role} 用の未使用素材が見つかりません。`);
+  }
+  const selected = candidates[0];
+  used.add(selected.path);
+  return selected;
 }
 
-function escapeFilterPath(filePath) {
-  return path.resolve(filePath)
-    .split(path.sep).join("/")
-    .replaceAll("\\", "\\\\")
-    .replaceAll(":", "\\:")
-    .replaceAll("'", "\\'")
-    .replaceAll(",", "\\,");
+function probeDuration(filePath) {
+  return Number(run(ffprobePath, ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", filePath]));
 }
 
-async function concatAndBurnSubtitles(segmentPaths, assPath, voicePath, outputPath, voiceDuration) {
-  const ffmpeg = ffmpegPath("ffmpeg");
-  const tempDir = path.dirname(segmentPaths[0]);
-  const concatPath = path.join(tempDir, "concat.txt");
-  await fsp.writeFile(concatPath, `${segmentPaths.map(concatLine).join("\n")}\n`, "utf8");
+function renderSegment(segment, asset, index) {
+  const duration = round(Number(segment.end) - Number(segment.start));
+  const clipName = `roughcut_segment_${String(index + 1).padStart(2, "0")}.mp4`;
+  const clipPath = path.join(outputDir, clipName);
+  const needsLoop = Number(asset.duration) < duration;
+  const args = [
+    "-y",
+    ...(needsLoop ? ["-stream_loop", "-1"] : []),
+    "-i",
+    asset.absolute_path,
+    "-t",
+    duration.toFixed(6),
+    "-an",
+    "-vf",
+    "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "20",
+    "-pix_fmt",
+    "yuv420p",
+    clipPath,
+  ];
+  run(ffmpegPath, args);
+  return { clipPath, duration, mode: needsLoop ? "loop" : "trim" };
+}
 
-  const subtitleFile = escapeFilterPath(assPath);
-  const fontDir = "C:/Windows/Fonts";
-  const fontClause = process.platform === "win32" && fs.existsSync(fontDir)
-    ? `:fontsdir='${escapeFilterPath(fontDir)}'`
-    : "";
-  const filter = `[0:v]subtitles=filename='${subtitleFile}'${fontClause}[v]`;
+function safeClipName(segment, index) {
+  const id = String(segment.id || segment.segment_id || segment.slot_id || `segment_${index + 1}`)
+    .replace(/[^A-Za-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "") || `segment_${index + 1}`;
+  return `${String(index + 1).padStart(2, "0")}_${id}.mp4`;
+}
 
-  await runCommand(
-    ffmpeg,
+if (!fs.existsSync(timelinePath)) fail("output/timeline_with_captions.json が見つかりません。");
+if (!fs.existsSync(manifestPath)) fail(`${rel(manifestPath)} が見つかりません。`);
+if (!fs.existsSync(audioPath)) fail("input/voice.mp3 が見つかりません。");
+if (!fs.existsSync(ffmpegPath)) fail("FFmpeg が見つかりません。");
+if (!fs.existsSync(ffprobePath)) fail("ffprobe が見つかりません。");
+
+const timeline = readJson(timelinePath);
+const manifest = readJson(manifestPath);
+const segments = Array.isArray(timeline.segments) ? timeline.segments : [];
+const captionCues = Array.isArray(timeline.caption_cues) ? timeline.caption_cues : [];
+const videos = Array.isArray(manifest.videos) ? manifest.videos : [];
+if (segments.length !== 7) fail(`segmentsが7件ではありません: ${segments.length}`);
+if (videos.length !== 34) fail(`認識素材が34本ではありません: ${videos.length}`);
+
+fs.mkdirSync(outputDir, { recursive: true });
+fs.rmSync(selectedClipsDir, { recursive: true, force: true });
+fs.mkdirSync(selectedClipsDir, { recursive: true });
+
+const expectedDuration = round(segments[segments.length - 1].end);
+const currentAudioDuration = probeDuration(audioPath);
+const sourceDurationDiff = Math.abs(currentAudioDuration - expectedDuration);
+if (sourceDurationDiff > 0.1) {
+  fail(
     [
-      "-y",
-      "-f", "concat",
-      "-safe", "0",
-      "-i", concatPath,
-      "-i", voicePath,
-      "-filter_complex", filter,
-      "-map", "[v]",
-      "-map", "1:a:0",
-      "-c:v", "libx264",
-      "-preset", "medium",
-      "-crf", "18",
-      "-pix_fmt", "yuv420p",
-      "-r", String(FPS),
-      "-c:a", "aac",
-      "-b:a", "192k",
-      "-t", voiceDuration.toFixed(6),
-      "-movflags", "+faststart",
-      outputPath,
-    ],
-    "Concatenating visual segments and burning captions"
+      "input/voice.mp3 と output/timeline_with_captions.json の尺が一致しません。",
+      `音声: ${currentAudioDuration.toFixed(3)}s / タイムライン: ${expectedDuration.toFixed(3)}s / 差分: ${sourceDurationDiff.toFixed(3)}s`,
+      "音声を作り直した場合は、timestamps結合とcaption_cues生成をやり直してください。",
+    ].join("\n")
   );
 }
 
-function round(value, digits = 6) {
-  return Number(Number(value).toFixed(digits));
+const used = new Set();
+const segmentPlans = [];
+const concatList = [];
+for (let index = 0; index < segments.length; index += 1) {
+  const segment = segments[index];
+  const role = segment.role || segment.video_slot?.role || rolePlan[index];
+  const duration = round(Number(segment.end) - Number(segment.start));
+  const asset = pickAsset(videos, role, used, duration);
+  const rendered = renderSegment(segment, asset, index);
+  const selectedClipPath = path.join(selectedClipsDir, safeClipName(segment, index));
+  fs.copyFileSync(rendered.clipPath, selectedClipPath);
+  segmentPlans.push({
+    segment_id: segment.id || segment.segment_id || `segment_${String(index + 1).padStart(2, "0")}`,
+    role,
+    start: round(segment.start),
+    end: round(segment.end),
+    duration_sec: duration,
+    asset_path: asset.path,
+    source_duration: round(asset.duration),
+    render_mode: rendered.mode,
+    clip: rel(rendered.clipPath),
+    selected_clip: rel(selectedClipPath),
+  });
+  concatList.push(`file '${rendered.clipPath.replace(/'/g, "'\\''")}'`);
 }
 
-async function main() {
-  const timelinePath = firstExisting(
-    [
-      process.env.TIMELINE_PATH,
-      "output/timeline_with_captions.json",
-    ],
-    "Timeline JSON"
+const concatPath = path.join(outputDir, "roughcut_concat.txt");
+fs.writeFileSync(concatPath, concatList.join("\n") + "\n", "utf8");
+const captionFile = writeCaptionAss(captionCues);
+
+const finalArgs = [
+  "-y",
+  "-f",
+  "concat",
+  "-safe",
+  "0",
+  "-i",
+  concatPath,
+  "-i",
+  audioPath,
+  "-map",
+  "0:v:0",
+  "-map",
+  "1:a:0",
+];
+if (captionFile) {
+  finalArgs.push(
+    "-vf",
+    "subtitles=output/rough_cut_captions.ass",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "18",
+    "-pix_fmt",
+    "yuv420p"
   );
-  const manifestPath = firstExisting(
-    [
-      process.env.ASSET_MANIFEST_PATH,
-      "assets/asset_manifest.json",
-      "asset_manifest.json",
-      "output/asset_manifest.json",
-      "config/asset_manifest.json",
-    ],
-    "asset_manifest.json"
-  );
-  const voicePath = firstExisting(
-    [
-      process.env.VOICE_PATH,
-      "input/voice.mp3",
-      "input/voice.wav",
-    ],
-    "Voice audio"
-  );
-
-  await fsp.mkdir(OUTPUT_DIR, { recursive: true });
-  const rawTimeline = readJson(timelinePath, "Timeline JSON");
-  const rawManifest = readJson(manifestPath, "asset_manifest.json");
-  const { segments, captionCues } = normalizeTimeline(rawTimeline);
-  const { assets, skipped } = await normalizeAssetManifest(rawManifest, manifestPath);
-  const voiceDuration = await probeDuration(voicePath);
-  const warnings = [];
-
-  const timelineEnd = segments.at(-1).end;
-  if (Math.abs(timelineEnd - voiceDuration) > 0.12) {
-    warnings.push(
-      `Timeline end (${timelineEnd.toFixed(3)}s) and voice duration (${voiceDuration.toFixed(3)}s) differ by more than 120ms. The final MP4 follows the voice duration.`
-    );
-  }
-  const finalCueEnd = captionCues.length ? captionCues.at(-1).end : 0;
-  if (Math.abs(finalCueEnd - voiceDuration) > 0.12) {
-    warnings.push(
-      `Final caption cue ends at ${finalCueEnd.toFixed(3)}s while voice is ${voiceDuration.toFixed(3)}s.`
-    );
-  }
-
-  const folderCounts = new Map();
-  const roleCounts = new Map();
-  for (const asset of assets) {
-    folderCounts.set(asset.folder, (folderCounts.get(asset.folder) || 0) + 1);
-    for (const role of asset.roles) {
-      roleCounts.set(role, (roleCounts.get(role) || 0) + 1);
-    }
-  }
-  const manifestCheck = {
-    manifest: projectPath(manifestPath),
-    valid_video_count: assets.length,
-    skipped_count: skipped.length,
-    folders: [...folderCounts.entries()].map(([folder, count]) => ({ folder, count })),
-    role_counts: Object.fromEntries(roleCounts),
-    skipped: skipped.slice(0, 50),
-  };
-  await fsp.writeFile(
-    path.join(OUTPUT_DIR, "asset_manifest_check.json"),
-    `${JSON.stringify(manifestCheck, null, 2)}\n`,
-    "utf8"
-  );
-
-  const assignments = await assignAssets(segments, assets, warnings);
-  const plan = framePlan(assignments, voiceDuration);
-
-  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "picoedit_timeline_"));
-  const assPath = path.join(OUTPUT_DIR, "rough_cut_subtitles.ass");
-  const outputPath = path.join(OUTPUT_DIR, "rough_cut.mp4");
-
-  try {
-    await writeAss(captionCues, voiceDuration, assPath);
-    const segmentPaths = [];
-    for (const [index, item] of plan.entries()) {
-      const segmentPath = path.join(tempDir, `${String(index).padStart(2, "0")}_${item.id}.mp4`);
-      await renderVisualSegment(item, segmentPath);
-      segmentPaths.push(segmentPath);
-    }
-    await concatAndBurnSubtitles(segmentPaths, assPath, voicePath, outputPath, voiceDuration);
-  } finally {
-    await fsp.rm(tempDir, { recursive: true, force: true });
-  }
-
-  const outputDuration = await probeDuration(outputPath);
-  const roughCutPlan = {
-    version: 1,
-    inputs: {
-      timeline: projectPath(timelinePath),
-      manifest: projectPath(manifestPath),
-      voice: projectPath(voicePath),
-    },
-    output: projectPath(outputPath),
-    settings: { width: WIDTH, height: HEIGHT, fps: FPS },
-    voice_duration: round(voiceDuration),
-    output_duration: round(outputDuration),
-    warnings,
-    segments: plan.map((item) => ({
-      id: item.id,
-      role: item.role,
-      start: round(item.start),
-      end: round(item.end),
-      timeline_duration: round(item.timelineDuration),
-      frame_start: item.frameStart,
-      frame_end: item.frameEnd,
-      rendered_duration: round(item.targetDuration),
-      asset: item.asset.projectPath,
-      source_duration: round(item.sourceDuration),
-      render_mode: item.mode,
-      speed: round(item.speed),
-      source_offset: round(item.sourceOffset),
-    })),
-  };
-  await fsp.writeFile(
-    path.join(OUTPUT_DIR, "rough_cut_plan.json"),
-    `${JSON.stringify(roughCutPlan, null, 2)}\n`,
-    "utf8"
-  );
-
-  console.log("\nPicoEdit timeline rough cut completed.");
-  console.log(`Voice:  ${voiceDuration.toFixed(3)}s`);
-  console.log(`Output: ${outputDuration.toFixed(3)}s`);
-  console.log(`Assets: ${assets.length} valid videos from ${projectPath(manifestPath)}`);
-  console.log(`Video:  ${projectPath(outputPath)}`);
-  console.log(`Plan:   output/rough_cut_plan.json`);
-  console.log(`Check:  output/asset_manifest_check.json`);
-  if (warnings.length) {
-    console.log("Warnings:");
-    for (const warning of warnings) console.log(`- ${warning}`);
-  }
+} else {
+  finalArgs.push("-c:v", "copy");
 }
+finalArgs.push(
+  "-c:a",
+  "aac",
+  "-b:a",
+  "192k",
+  "-t",
+  expectedDuration.toFixed(6),
+  "-shortest",
+  roughCutPath
+);
+run(ffmpegPath, finalArgs);
 
-main().catch((error) => {
-  console.error("\nPicoEdit timeline rough cut failed.");
-  console.error(error.stack || error.message);
-  process.exitCode = 1;
-});
+const audioDuration = currentAudioDuration;
+const roughCutDuration = probeDuration(roughCutPath);
+const durationDiff = Math.abs(roughCutDuration - audioDuration);
+const streamJson = JSON.parse(run(ffprobePath, [
+  "-v",
+  "error",
+  "-select_streams",
+  "v:0",
+  "-show_entries",
+  "stream=width,height,avg_frame_rate",
+  "-of",
+  "json",
+  roughCutPath,
+]));
+const stream = streamJson.streams?.[0] || {};
+
+const plan = {
+  ok: durationDiff <= 0.1,
+  source_timeline: "output/timeline_with_captions.json",
+  source_manifest: rel(manifestPath),
+  output: "output/rough_cut.mp4",
+  recognized_video_count: videos.length,
+  segment_count: segments.length,
+  expected_duration: expectedDuration,
+  audio_duration: round(audioDuration),
+  rough_cut_duration: round(roughCutDuration),
+  duration_diff: round(durationDiff),
+  width: stream.width,
+  height: stream.height,
+  fps: stream.avg_frame_rate,
+  caption_cue_count: captionCues.length,
+  captions: captionFile ? rel(captionFile) : null,
+  assignments: segmentPlans,
+};
+
+fs.writeFileSync(planPath, `${JSON.stringify(plan, null, 2)}\n`, "utf8");
+
+console.log(`manifest: ${rel(manifestPath)}`);
+console.log(`recognized videos: ${videos.length}`);
+console.log(`segments assigned: ${segments.length}`);
+for (const item of segmentPlans) {
+  console.log(`${item.segment_id}: ${item.role} -> ${item.asset_path} (${item.start}-${item.end}s, ${item.render_mode})`);
+}
+console.log(`created: ${rel(planPath)}`);
+if (captionFile) {
+  console.log(`captions: ${rel(captionFile)} (${captionCues.length} cues)`);
+}
+console.log(`created: ${rel(roughCutPath)}`);
+console.log(`audio duration: ${audioDuration.toFixed(3)}s`);
+console.log(`rough_cut duration: ${roughCutDuration.toFixed(3)}s`);
+console.log(`duration diff: ${durationDiff.toFixed(3)}s`);
+if (!plan.ok) {
+  fail("rough cut duration check failed");
+}

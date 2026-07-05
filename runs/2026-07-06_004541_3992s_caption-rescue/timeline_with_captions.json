@@ -1,0 +1,420 @@
+{
+  "template_id": "derived_from_elevenlabs_timestamps",
+  "source_script": "derived_from_elevenlabs_timestamps",
+  "output_script": "output/script_timed.json",
+  "timestamps": "output/elevenlabs_timestamps.json",
+  "audio": {
+    "path": "input/voice.mp3",
+    "duration_sec": 39.92
+  },
+  "duration_sec": 39.92,
+  "segments": [
+    {
+      "id": "segment_01",
+      "text": "ChatGPTはたまに使える便利な検索ツールだと思っていませんか？",
+      "segment_id": "segment_01",
+      "slot_id": "segment_01",
+      "label": "ChatGPTはたまに使える便利な検索ツールだと思っていませんか？",
+      "start": 0,
+      "end": 5.76,
+      "duration": 5.76,
+      "duration_sec": 5.76,
+      "asset": "",
+      "speed": 1,
+      "caption": {
+        "text": "ChatGPTはたまに使える便利な検索ツールだと思っていませんか？",
+        "start": 0,
+        "end": 5.76,
+        "duration_sec": 5.76
+      },
+      "video_slot": {
+        "text": "segment_01",
+        "start": 0,
+        "end": 5.76,
+        "duration_sec": 5.76
+      }
+    },
+    {
+      "id": "segment_02",
+      "text": "実はその使い方、すごく損をしています",
+      "segment_id": "segment_02",
+      "slot_id": "segment_02",
+      "label": "実はその使い方、すごく損をしています",
+      "start": 5.76,
+      "end": 9.68,
+      "duration": 3.92,
+      "duration_sec": 3.92,
+      "asset": "",
+      "speed": 1,
+      "caption": {
+        "text": "実はその使い方、すごく損をしています",
+        "start": 5.76,
+        "end": 9.68,
+        "duration_sec": 3.92
+      },
+      "video_slot": {
+        "text": "segment_02",
+        "start": 5.76,
+        "end": 9.68,
+        "duration_sec": 3.92
+      }
+    },
+    {
+      "id": "segment_03",
+      "text": "でも、いざちゃんと使おうと思うと、なんて質問したらいいか迷いますよね？",
+      "segment_id": "segment_03",
+      "slot_id": "segment_03",
+      "label": "でも、いざちゃんと使おうと思うと、なんて質問したらいいか迷いますよね？",
+      "start": 9.68,
+      "end": 15.44,
+      "duration": 5.76,
+      "duration_sec": 5.76,
+      "asset": "",
+      "speed": 1,
+      "caption": {
+        "text": "でも、いざちゃんと使おうと思うと、なんて質問したらいいか迷いますよね？",
+        "start": 9.68,
+        "end": 15.44,
+        "duration_sec": 5.76
+      },
+      "video_slot": {
+        "text": "segment_03",
+        "start": 9.68,
+        "end": 15.44,
+        "duration_sec": 5.76
+      }
+    },
+    {
+      "id": "segment_04",
+      "text": "そこで、自分で質問するのではなく、逆にChatGPTに質問をしてもらいます",
+      "segment_id": "segment_04",
+      "slot_id": "segment_04",
+      "label": "そこで、自分で質問するのではなく、逆にChatGPTに質問をしてもらいます",
+      "start": 15.44,
+      "end": 22.56,
+      "duration": 7.12,
+      "duration_sec": 7.12,
+      "asset": "",
+      "speed": 1,
+      "caption": {
+        "text": "そこで、自分で質問するのではなく、逆にChatGPTに質問をしてもらいます",
+        "start": 15.44,
+        "end": 22.56,
+        "duration_sec": 7.12
+      },
+      "video_slot": {
+        "text": "segment_04",
+        "start": 15.44,
+        "end": 22.56,
+        "duration_sec": 7.12
+      }
+    },
+    {
+      "id": "segment_05",
+      "text": "実はこの使い方、少し前まで上級者の方が使っていた方法で、自分に合った柔軟な回答を得られやすいということでおおバズリしました。",
+      "segment_id": "segment_05",
+      "slot_id": "segment_05",
+      "label": "実はこの使い方、少し前まで上級者の方が使っていた方法で、自分に合った柔軟な回答を得られやすいということでおおバズリしました。",
+      "start": 22.56,
+      "end": 33.4,
+      "duration": 10.84,
+      "duration_sec": 10.84,
+      "asset": "",
+      "speed": 1,
+      "caption": {
+        "text": "実はこの使い方、少し前まで上級者の方が使っていた方法で、自分に合った柔軟な回答を得られやすいということでおおバズリしました。",
+        "start": 22.56,
+        "end": 33.4,
+        "duration_sec": 10.84
+      },
+      "video_slot": {
+        "text": "segment_05",
+        "start": 22.56,
+        "end": 33.4,
+        "duration_sec": 10.84
+      }
+    },
+    {
+      "id": "segment_06",
+      "text": "今でも一部の上級者の方はこの使い方をしているので、超！おすすめ！",
+      "segment_id": "segment_06",
+      "slot_id": "segment_06",
+      "label": "今でも一部の上級者の方はこの使い方をしているので、超！おすすめ！",
+      "start": 33.4,
+      "end": 38.92,
+      "duration": 5.52,
+      "duration_sec": 5.52,
+      "asset": "",
+      "speed": 1,
+      "caption": {
+        "text": "今でも一部の上級者の方はこの使い方をしているので、超！おすすめ！",
+        "start": 33.4,
+        "end": 38.92,
+        "duration_sec": 5.52
+      },
+      "video_slot": {
+        "text": "segment_06",
+        "start": 33.4,
+        "end": 38.92,
+        "duration_sec": 5.52
+      }
+    },
+    {
+      "id": "segment_07",
+      "text": "やり方はこうです！",
+      "segment_id": "segment_07",
+      "slot_id": "segment_07",
+      "label": "やり方はこうです！",
+      "start": 38.92,
+      "end": 39.92,
+      "duration": 1,
+      "duration_sec": 1,
+      "asset": "",
+      "speed": 1,
+      "caption": {
+        "text": "やり方はこうです！",
+        "start": 38.92,
+        "end": 39.92,
+        "duration_sec": 1
+      },
+      "video_slot": {
+        "text": "segment_07",
+        "start": 38.92,
+        "end": 39.92,
+        "duration_sec": 1
+      }
+    }
+  ],
+  "validation": {
+    "continuous": true,
+    "last_end_sec": 39.92,
+    "audio_duration_sec": 39.92,
+    "last_end_audio_diff_sec": 0
+  },
+  "caption_cues": [
+    {
+      "id": "caption_001",
+      "text": "ChatGPTはたまに使える",
+      "lines": [
+        "ChatGPTはたまに使える"
+      ],
+      "start": 0,
+      "end": 2.24,
+      "duration_sec": 2.24,
+      "char_start_index": 0,
+      "char_end_index": 13
+    },
+    {
+      "id": "caption_002",
+      "text": "便利な検索ツールだと思って",
+      "lines": [
+        "便利な検索ツールだと思って"
+      ],
+      "start": 2.24,
+      "end": 3.867,
+      "duration_sec": 1.627,
+      "char_start_index": 14,
+      "char_end_index": 26
+    },
+    {
+      "id": "caption_003",
+      "text": "いませんか？",
+      "lines": [
+        "いませんか？"
+      ],
+      "start": 3.867,
+      "end": 5.52,
+      "duration_sec": 1.653,
+      "char_start_index": 27,
+      "char_end_index": 32
+    },
+    {
+      "id": "caption_004",
+      "text": "実はその使い方、すごく損をしています",
+      "lines": [
+        "実はその使い方、す",
+        "ごく損をしています"
+      ],
+      "start": 5.76,
+      "end": 8.16,
+      "duration_sec": 2.4,
+      "char_start_index": 34,
+      "char_end_index": 51
+    },
+    {
+      "id": "caption_005",
+      "text": "でも、いざちゃんと使おうと思うと",
+      "lines": [
+        "でも、いざちゃんと使おうと思うと"
+      ],
+      "start": 9.68,
+      "end": 11.76,
+      "duration_sec": 2.08,
+      "char_start_index": 53,
+      "char_end_index": 68
+    },
+    {
+      "id": "caption_006",
+      "text": "なんて質問したらいいか迷いま",
+      "lines": [
+        "なんて質問したらいいか迷いま"
+      ],
+      "start": 11.76,
+      "end": 13.52,
+      "duration_sec": 1.76,
+      "char_start_index": 69,
+      "char_end_index": 83
+    },
+    {
+      "id": "caption_007",
+      "text": "すよね？",
+      "lines": [
+        "すよね？"
+      ],
+      "start": 13.52,
+      "end": 15.36,
+      "duration_sec": 1.84,
+      "char_start_index": 84,
+      "char_end_index": 87
+    },
+    {
+      "id": "caption_008",
+      "text": "そこで、自分で質問するのではなく",
+      "lines": [
+        "そこで、自分で質問するのではなく"
+      ],
+      "start": 15.44,
+      "end": 17.92,
+      "duration_sec": 2.48,
+      "char_start_index": 89,
+      "char_end_index": 104
+    },
+    {
+      "id": "caption_009",
+      "text": "逆にChatGPTに質問をしてもらいます",
+      "lines": [
+        "逆にChatGPTに質",
+        "問をしてもらいます"
+      ],
+      "start": 17.92,
+      "end": 20.72,
+      "duration_sec": 2.8,
+      "char_start_index": 105,
+      "char_end_index": 125
+    },
+    {
+      "id": "caption_010",
+      "text": "実はこの使い方、",
+      "lines": [
+        "実はこの使い方、"
+      ],
+      "start": 22.56,
+      "end": 23.92,
+      "duration_sec": 1.36,
+      "char_start_index": 127,
+      "char_end_index": 134
+    },
+    {
+      "id": "caption_011",
+      "text": "少し前まで上級者の方が使って",
+      "lines": [
+        "少し前まで上級者の方が使って"
+      ],
+      "start": 23.92,
+      "end": 26.12,
+      "duration_sec": 2.2,
+      "char_start_index": 135,
+      "char_end_index": 148
+    },
+    {
+      "id": "caption_012",
+      "text": "いた方法で、自分に合った",
+      "lines": [
+        "いた方法で、自分に合った"
+      ],
+      "start": 26.12,
+      "end": 28.16,
+      "duration_sec": 2.04,
+      "char_start_index": 149,
+      "char_end_index": 160
+    },
+    {
+      "id": "caption_013",
+      "text": "柔軟な回答を得られやすいとい",
+      "lines": [
+        "柔軟な回答を得られやすいとい"
+      ],
+      "start": 28.16,
+      "end": 30.053,
+      "duration_sec": 1.893,
+      "char_start_index": 161,
+      "char_end_index": 174
+    },
+    {
+      "id": "caption_014",
+      "text": "うことでおおバズリしま",
+      "lines": [
+        "うことでおおバズリしま"
+      ],
+      "start": 30.053,
+      "end": 31.56,
+      "duration_sec": 1.507,
+      "char_start_index": 175,
+      "char_end_index": 185
+    },
+    {
+      "id": "caption_015",
+      "text": "した。",
+      "lines": [
+        "した。"
+      ],
+      "start": 31.56,
+      "end": 33.28,
+      "duration_sec": 1.72,
+      "char_start_index": 186,
+      "char_end_index": 188
+    },
+    {
+      "id": "caption_016",
+      "text": "今でも一部の上級者の方はこの使い",
+      "lines": [
+        "今でも一部の上級者の方はこの使い"
+      ],
+      "start": 33.4,
+      "end": 35.76,
+      "duration_sec": 2.36,
+      "char_start_index": 190,
+      "char_end_index": 205
+    },
+    {
+      "id": "caption_017",
+      "text": "方をしているので、超！",
+      "lines": [
+        "方をしているので、超！"
+      ],
+      "start": 35.76,
+      "end": 37.52,
+      "duration_sec": 1.76,
+      "char_start_index": 206,
+      "char_end_index": 216
+    },
+    {
+      "id": "caption_018",
+      "text": "おすすめ！ やり方はこうです！",
+      "lines": [
+        "おすすめ！ やり方はこうです！"
+      ],
+      "start": 37.52,
+      "end": 39.92,
+      "duration_sec": 2.4,
+      "char_start_index": 217,
+      "char_end_index": 231
+    }
+  ],
+  "caption_validation": {
+    "cue_count": 18,
+    "audio_duration_sec": 39.92,
+    "last_cue_end_sec": 39.92,
+    "last_cue_audio_diff_sec": 0
+  }
+}

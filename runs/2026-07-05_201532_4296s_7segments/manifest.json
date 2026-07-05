@@ -1,0 +1,52 @@
+{
+  "run_id": "2026-07-05_201532_4296s_7segments",
+  "created_at": "2026-07-05T23:29:59.4613479+09:00",
+  "git_commit": "d99714eb4925c1e24cf5155d9ba766972b231fbf",
+  "source_script": "derived_from_elevenlabs_timestamps",
+  "voice": {
+    "path_at_capture": "input/voice.mp3",
+    "archived_copy": null,
+    "archived_copy_verified": false,
+    "duration_sec": 39.92,
+    "sha256": "23a480a3d03e1117c412b1a5d504305390bea55b6139930bc96d0eb0a0794660",
+    "size_bytes": 639939,
+    "mtime_iso": "2026-07-05T13:47:54.0367109Z",
+    "warning": "Current input/voice.mp3 probes at 39.92s. The captured render evidence records a 42.96s timeline and rough_cut."
+  },
+  "timeline": {
+    "path": "output/timeline_with_captions.json",
+    "copied_to": "runs/2026-07-05_201532_4296s_7segments/timeline_with_captions.json",
+    "segment_count": 7,
+    "caption_cue_count": 21,
+    "final_segment_end_sec": 42.96,
+    "final_caption_end_sec": 42.96
+  },
+  "assets": {
+    "manifest_path": "output/asset_manifest_for_renderer.json",
+    "check_copied_to": "runs/2026-07-05_201532_4296s_7segments/asset_manifest_check.json",
+    "recognized_video_count": 34,
+    "missing_count": 0
+  },
+  "render": {
+    "selected_clip_count": 7,
+    "selected_clips_manifest": "runs/2026-07-05_201532_4296s_7segments/selected_clips.json",
+    "rough_cut_path": "output/rough_cut.mp4",
+    "duration_sec": 42.96,
+    "sha256": "9a7ef63028f9166979ae89ab113e290921ab466a761ae7185b65ea36aae7c345",
+    "size_bytes": 44918417,
+    "mtime_utc": "2026-07-05T11:15:32.3960160Z",
+    "plan_copied_to": "runs/2026-07-05_201532_4296s_7segments/rough_cut_plan.json"
+  },
+  "quality": {
+    "status": "needs_revalidation",
+    "voice_to_segment_diff_sec": 3.04,
+    "voice_to_caption_diff_sec": 3.04,
+    "voice_to_render_diff_sec": 3.04,
+    "segment_to_render_diff_sec": 0,
+    "notes": [
+      "Current input/voice.mp3 is 39.92s, while this run timeline and render are 42.96s.",
+      "The original 42.96s source voice is not currently verified as archived.",
+      "This run may be used as an artifact reference, but not as a golden regression baseline."
+    ]
+  }
+}

@@ -1,39 +1,40 @@
 const state = {
-  templates: [],
-  templateName: "ai_prompt_30s.json",
-  template: null,
   assets: null,
-  timeline: null,
   outputExists: false,
-  slotSelections: {},
-  timelineRoughCut: null,
-  timelineBridgeError: null,
+  exportClips: [],
+  voice: null,
+  timelineRenderState: null,
+  assetCatalog: null,
+  installingPackId: null,
+  exportDirectoryHandle: null,
+  exportDirectoryName: "",
 };
 
 const elements = {
   projectStatus: document.querySelector("#projectStatus"),
-  templateSelect: document.querySelector("#templateSelect"),
   reloadButton: document.querySelector("#reloadButton"),
-  saveButton: document.querySelector("#saveButton"),
-  renderButton: document.querySelector("#renderButton"),
   timelineRenderButton: document.querySelector("#timelineRenderButton"),
-  templateId: document.querySelector("#templateId"),
-  outputSize: document.querySelector("#outputSize"),
-  fps: document.querySelector("#fps"),
-  slotRows: document.querySelector("#slotRows"),
+  exportFolderButton: document.querySelector("#exportFolderButton"),
+  exportButton: document.querySelector("#exportButton"),
   previewVideo: document.querySelector("#previewVideo"),
   emptyPreview: document.querySelector("#emptyPreview"),
   outputMeta: document.querySelector("#outputMeta"),
+  singleVideoButton: document.querySelector("#singleVideoButton"),
+  voiceStatus: document.querySelector("#voiceStatus"),
+  voiceText: document.querySelector("#voiceText"),
+  voiceGenerateButton: document.querySelector("#voiceGenerateButton"),
+  mergeTimestampsButton: document.querySelector("#mergeTimestampsButton"),
+  voiceMeta: document.querySelector("#voiceMeta"),
+  voiceAudio: document.querySelector("#voiceAudio"),
   timelineMeta: document.querySelector("#timelineMeta"),
-  timelinePipelineMeta: document.querySelector("#timelinePipelineMeta"),
   timelineRows: document.querySelector("#timelineRows"),
   assetMeta: document.querySelector("#assetMeta"),
   assetFolders: document.querySelector("#assetFolders"),
+  packMeta: document.querySelector("#packMeta"),
+  packList: document.querySelector("#packList"),
   logOutput: document.querySelector("#logOutput"),
   clearLogButton: document.querySelector("#clearLogButton"),
 };
-
-const timelineBridgeBase = `http://${window.location.hostname || "127.0.0.1"}:8766`;
 
 function log(message, type = "info") {
   const time = new Date().toLocaleTimeString("ja-JP", { hour12: false });
@@ -51,385 +52,401 @@ async function api(path, options = {}) {
     },
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || `Request failed: ${response.status}`);
-  return data;
-}
-
-async function timelineApi(path, options = {}) {
-  let response;
-  try {
-    response = await fetch(`${timelineBridgeBase}${path}`, {
-      ...options,
-      headers: {
-        "content-type": "application/json",
-        ...(options.headers || {}),
-      },
-    });
-  } catch {
-    throw new Error("音声タイムライン連携が起動していません。PicoEditを終了し、npm start で再起動してください。");
+  if (!response.ok) {
+    const error = new Error(data.error || `Request failed: ${response.status}`);
+    error.logs = data.logs || [];
+    throw error;
   }
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || `Timeline request failed: ${response.status}`);
   return data;
 }
 
 function escapeHtml(value) {
-  return String(value ?? "")
+  return String(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
 }
 
-function asNumber(value, fallback = 0) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
-}
-
-function formatSeconds(value) {
-  return `${asNumber(value).toFixed(2)}s`;
-}
-
-function folderOptions(selectedFolder) {
-  return (state.assets?.folders || [])
-    .map(({ folder, count }) => `<option value="${escapeHtml(folder)}" ${folder === selectedFolder ? "selected" : ""}>${escapeHtml(folder)} (${count})</option>`)
-    .join("");
-}
-
-function allAssets() {
-  return (state.assets?.folders || []).flatMap((group) => group.files || []);
-}
-
-function findAsset(assetPath) {
-  return allAssets().find((asset) => asset.path === assetPath) || null;
-}
-
-function assetsForFolder(folder) {
-  return allAssets().filter((asset) => asset.folder === folder);
-}
-
-function assetOptions(selectedPath, folder) {
-  const folderAssets = assetsForFolder(folder);
-  const selectedAsset = findAsset(selectedPath);
-  const candidates = selectedAsset && !folderAssets.some((asset) => asset.path === selectedAsset.path)
-    ? [selectedAsset, ...folderAssets]
-    : folderAssets;
-  return candidates
-    .map((asset) => `<option value="${escapeHtml(asset.path)}" ${asset.path === selectedPath ? "selected" : ""}>${escapeHtml(asset.name)}</option>`)
-    .join("");
-}
-
 function fileNameFromPath(assetPath) {
   return String(assetPath || "").split("/").pop() || "-";
 }
 
-function readTemplateFromForm() {
-  return {
-    template_id: elements.templateId.value.trim(),
-    output_size: elements.outputSize.value.trim(),
-    fps: Number(elements.fps.value),
-    slots: [...elements.slotRows.querySelectorAll("tr")].map((row) => ({
-      slot_id: row.dataset.slotId,
-      label: row.querySelector("[data-field='label']").value,
-      folder: row.querySelector("[data-field='folder']").value,
-      target_duration: Number(row.querySelector("[data-field='target_duration']").value),
-    })),
-  };
-}
-
-function readAssetSelectionsFromForm() {
-  const selections = {};
-  for (const row of elements.slotRows.querySelectorAll("tr")) {
-    const assetPath = row.querySelector("[data-field='asset']")?.value;
-    if (assetPath) selections[row.dataset.slotId] = assetPath;
-  }
-  return selections;
-}
-
-function updateSlotSelectionView(row, assetPath) {
-  const asset = findAsset(assetPath);
-  const video = row.querySelector("[data-role='slot-preview']");
-  row.querySelector("[data-role='asset-name']").textContent = asset?.name || fileNameFromPath(assetPath);
-  row.querySelector("[data-role='asset-path']").textContent = assetPath || "-";
-  if (assetPath) {
-    video.src = `/media/${assetPath}`;
-    video.load();
-  } else {
-    video.removeAttribute("src");
-  }
-}
-
-function setRowAsset(row, slotId, assetPath) {
-  const picker = row.querySelector("[data-field='asset']");
-  state.slotSelections[slotId] = assetPath;
-  picker.value = assetPath;
-  updateSlotSelectionView(row, assetPath);
-}
-
-function renderTemplate() {
-  const template = state.template;
-  elements.templateId.value = template?.template_id || "";
-  elements.outputSize.value = template?.output_size || "";
-  elements.fps.value = template?.fps || 30;
-  elements.slotRows.innerHTML = "";
-
-  for (const slot of template?.slots || []) {
-    const selectedAsset = state.slotSelections[slot.slot_id] || "";
-    const row = document.createElement("tr");
-    row.dataset.slotId = slot.slot_id;
-    row.innerHTML = `
-      <td class="slot-id">${escapeHtml(slot.slot_id)}</td>
-      <td><input data-field="label" type="text" value="${escapeHtml(slot.label)}"></td>
-      <td><select data-field="folder">${folderOptions(slot.folder)}</select></td>
-      <td><input data-field="target_duration" type="number" min="0.1" step="0.1" value="${slot.target_duration}"></td>
-      <td class="asset-cell"><strong data-role="asset-name">${escapeHtml(fileNameFromPath(selectedAsset))}</strong><p data-role="asset-path">${escapeHtml(selectedAsset || "-")}</p></td>
-      <td><video class="slot-preview-video" data-role="slot-preview" muted controls preload="metadata"></video></td>
-      <td class="asset-actions"><button type="button" data-action="change-asset">素材を変更</button><select class="asset-picker" data-field="asset" hidden>${assetOptions(selectedAsset, slot.folder)}</select></td>
-    `;
-    elements.slotRows.appendChild(row);
-    const folderSelect = row.querySelector("[data-field='folder']");
-    const picker = row.querySelector("[data-field='asset']");
-    picker.addEventListener("change", () => {
-      setRowAsset(row, slot.slot_id, picker.value);
-      log(`${slot.slot_id} asset changed to ${fileNameFromPath(picker.value)}`);
-    });
-    folderSelect.addEventListener("change", () => {
-      const folderAssets = assetsForFolder(folderSelect.value);
-      picker.innerHTML = assetOptions(folderAssets[0]?.path || "", folderSelect.value);
-      setRowAsset(row, slot.slot_id, folderAssets[0]?.path || "");
-      log(`${slot.slot_id} folder changed to ${folderSelect.value}`, folderAssets.length ? "info" : "warn");
-    });
-    row.querySelector("[data-action='change-asset']").addEventListener("click", () => {
-      picker.hidden = !picker.hidden;
-      if (!picker.hidden) picker.focus();
-    });
-    updateSlotSelectionView(row, selectedAsset);
-  }
-}
-
-function renderTemplates() {
-  elements.templateSelect.innerHTML = state.templates
-    .map((name) => `<option value="${escapeHtml(name)}" ${name === state.templateName ? "selected" : ""}>${escapeHtml(name)}</option>`)
-    .join("");
-}
-
-function renderPreview(outputUrl = null) {
+function renderPreview(outputUrl) {
   const frame = elements.previewVideo.closest(".preview-frame");
-  const url = outputUrl || (state.outputExists ? `/media/output/rough_cut.mp4?v=${Date.now()}` : null);
-  if (url) {
+  if (outputUrl || state.outputExists) {
+    const url = outputUrl || `/media/output/rough_cut.mp4?v=${Date.now()}`;
     elements.previewVideo.src = url;
     frame.classList.add("has-video");
+    elements.singleVideoButton.href = url;
+    elements.singleVideoButton.setAttribute("aria-disabled", "false");
+    elements.singleVideoButton.tabIndex = 0;
   } else {
     elements.previewVideo.removeAttribute("src");
     frame.classList.remove("has-video");
+    elements.singleVideoButton.href = "/media/output/rough_cut.mp4";
+    elements.singleVideoButton.setAttribute("aria-disabled", "true");
+    elements.singleVideoButton.tabIndex = -1;
   }
+  renderExportControls();
 }
 
-function timelineAssignments(plan) {
-  if (Array.isArray(plan?.assignments)) return plan.assignments;
-  if (Array.isArray(plan?.segments)) return plan.segments;
-  return [];
+function renderExportControls() {
+  const clipCount = state.exportClips?.length || 0;
+  elements.exportButton.disabled = clipCount === 0;
+  elements.exportButton.textContent = clipCount ? `書き出し (${clipCount})` : "書き出し";
+  elements.exportFolderButton.textContent = state.exportDirectoryName
+    ? `書き出し先: ${state.exportDirectoryName}`
+    : "書き出し先";
 }
 
-function assignmentValue(item, names, fallback = "") {
-  for (const name of names) {
-    if (item?.[name] !== undefined && item?.[name] !== null && item?.[name] !== "") return item[name];
+function renderVoice() {
+  const voice = state.voice || {};
+  if (!voice.api_key_configured) {
+    elements.voiceStatus.textContent = "APIキー未設定";
+  } else if (!voice.voice_id_configured) {
+    elements.voiceStatus.textContent = "Voice ID未設定";
+  } else {
+    elements.voiceStatus.textContent = "設定済み";
   }
-  return fallback;
+
+  if (voice.audio_url) {
+    elements.voiceAudio.src = voice.audio_url;
+    elements.voiceAudio.hidden = false;
+    elements.voiceMeta.textContent = `${voice.audio_path} / ${voice.timestamps_path}`;
+  } else {
+    elements.voiceAudio.removeAttribute("src");
+    elements.voiceAudio.hidden = true;
+    elements.voiceMeta.textContent = voice.configured ? "音声はまだありません" : "ElevenLabs APIキーを設定してください";
+  }
 }
 
 function renderTimeline() {
-  const plan = state.timelineRoughCut?.plan;
-  const assignments = timelineAssignments(plan);
+  const timelineRender = state.timelineRenderState || {};
+  const plan = timelineRender.plan || {};
+  const check = timelineRender.manifestCheck || {};
+  const assignments = Array.isArray(plan.assignments) ? plan.assignments : [];
+  elements.timelineMeta.textContent = assignments.length
+    ? `${assignments.length} segments / ${Number(plan.rough_cut_duration || 0).toFixed(2)}s`
+    : "-";
+  elements.outputMeta.textContent = timelineRender.outputExists
+    ? `${Number(plan.rough_cut_duration || 0).toFixed(2)}s / 1080x1920`
+    : "-";
   elements.timelineRows.innerHTML = "";
 
-  if (assignments.length) {
-    const duration = assignmentValue(plan, ["expected_duration", "voice_duration", "output_duration"], assignmentValue(assignments.at(-1), ["end"], 0));
-    elements.timelineMeta.textContent = `${assignments.length} blocks / ${formatSeconds(duration)} / 音声基準`;
-    const check = state.timelineRoughCut?.manifest_check;
-    const assetCount = assignmentValue(check, ["recognized_video_count", "video_count", "valid_video_count"], 0);
-    elements.timelinePipelineMeta.textContent = assetCount ? `素材 ${assetCount}本 / 自動割当済み` : "音声タイムライン方式";
-    elements.outputMeta.textContent = state.timelineRoughCut?.output_exists ? `${formatSeconds(assignmentValue(plan, ["rough_cut_duration", "output_duration", "audio_duration"], duration))} / 1080x1920` : "-";
-
-    for (const item of assignments) {
-      const id = assignmentValue(item, ["segment_id", "id", "slot_id"], "segment");
-      const role = assignmentValue(item, ["role"], "-");
-      const start = asNumber(assignmentValue(item, ["start"], 0));
-      const end = asNumber(assignmentValue(item, ["end"], start));
-      const asset = assignmentValue(item, ["asset_path", "asset"], "-");
-      const mode = assignmentValue(item, ["render_mode", "mode"], "-");
-      const row = document.createElement("article");
-      row.className = "timeline-row";
-      row.innerHTML = `
-        <header><span>${escapeHtml(id)} / ${escapeHtml(role)}</span><span>${start.toFixed(2)}-${end.toFixed(2)}s</span></header>
-        <p>${escapeHtml(asset)}</p>
-        <p>${escapeHtml(mode)}</p>
-      `;
-      elements.timelineRows.appendChild(row);
-    }
+  if (!assignments.length) {
+    elements.timelineRows.innerHTML = `<div class="timeline-row"><p>output/timeline_with_captions.json を基準に生成します。</p></div>`;
     return;
   }
 
-  const segments = state.timeline?.segments || [];
-  if (segments.length) {
-    const total = asNumber(segments.at(-1).end);
-    elements.timelineMeta.textContent = `${segments.length} slots / ${formatSeconds(total)} / 旧テンプレート`;
-    elements.timelinePipelineMeta.textContent = "音声タイムラインは未生成";
-    elements.outputMeta.textContent = state.outputExists ? `${formatSeconds(total)} / 1080x1920` : "-";
-    for (const segment of segments) {
-      const row = document.createElement("article");
-      row.className = "timeline-row";
-      row.innerHTML = `<header><span>${escapeHtml(segment.slot_id)} / ${escapeHtml(segment.label)}</span><span>${asNumber(segment.start).toFixed(1)}-${asNumber(segment.end).toFixed(1)}s</span></header><p>${escapeHtml(segment.asset)}</p><p>speed ${asNumber(segment.speed, 1).toFixed(3)}x</p>`;
-      elements.timelineRows.appendChild(row);
-    }
-    return;
-  }
+  const roles = check.roles || {};
+  const summary = document.createElement("article");
+  summary.className = "timeline-row timeline-summary";
+  summary.innerHTML = `
+    <header>
+      <span>音声タイムライン生成</span>
+      <span>${escapeHtml(String(plan.ok ? "OK" : "確認中"))}</span>
+    </header>
+    <p>素材 ${Number(check.video_count || plan.recognized_video_count || 0)}本</p>
+    <p>hook ${Number(roles.hook || 0)} / problem ${Number(roles.problem || 0)} / explain ${Number(roles.explain || 0)} / proof ${Number(roles.proof || 0)} / cta ${Number(roles.cta || 0)}</p>
+    <p>missing ${Number(check.missing_count || 0)}</p>
+  `;
+  elements.timelineRows.appendChild(summary);
 
-  elements.timelineMeta.textContent = "未生成";
-  elements.outputMeta.textContent = "-";
-  elements.timelinePipelineMeta.textContent = state.timelineBridgeError || "timeline_with_captions.json → 素材 → rough_cut.mp4";
-  elements.timelineRows.innerHTML = `<div class="timeline-row"><p>上部の「音声タイムライン生成」を押すと、台帳確認・7ブロックの自動割当・rough_cut.mp4出力をまとめて実行します。</p></div>`;
+  for (const assignment of assignments) {
+    const row = document.createElement("article");
+    row.className = "timeline-row";
+    row.innerHTML = `
+      <header>
+        <span>${escapeHtml(assignment.segment_id)} / ${escapeHtml(assignment.role)}</span>
+        <span>${Number(assignment.start).toFixed(2)}-${Number(assignment.end).toFixed(2)}s</span>
+      </header>
+      <p>素材: ${escapeHtml(fileNameFromPath(assignment.asset_path))}</p>
+      <p>${escapeHtml(assignment.asset_path)}</p>
+      <p>処理: ${escapeHtml(assignment.render_mode)} / ${Number(assignment.duration_sec).toFixed(2)}s</p>
+    `;
+    elements.timelineRows.appendChild(row);
+  }
 }
 
 function renderAssets() {
   const folders = state.assets?.folders || [];
   elements.assetMeta.textContent = `${state.assets?.count || 0} files`;
   elements.assetFolders.innerHTML = "";
+
   for (const group of folders) {
     const node = document.createElement("article");
     node.className = "asset-folder";
-    node.innerHTML = `<header><span>${escapeHtml(group.folder)}</span><span>${group.count}</span></header><ul>${group.files.map((file) => `<li>${escapeHtml(file.name)}</li>`).join("")}</ul>`;
+    const files = group.files.map((file) => `<li>${escapeHtml(file.name)}</li>`).join("");
+    node.innerHTML = `
+      <header>
+        <span>${escapeHtml(group.folder)}</span>
+        <span>${group.count}</span>
+      </header>
+      <ul>${files}</ul>
+    `;
     elements.assetFolders.appendChild(node);
   }
 }
 
-function renderAll() {
-  renderTemplates();
-  renderTemplate();
-  renderTimeline();
-  renderAssets();
-  renderPreview(state.timelineRoughCut?.output_url || null);
-  const bridge = state.timelineBridgeError ? " / 音声タイムライン連携未起動" : "";
-  elements.projectStatus.textContent = `${state.templateName} / ${state.assets?.count || 0} assets${bridge}`;
-}
+function renderAssetPacks() {
+  const packs = state.assetCatalog?.packs || [];
+  elements.packMeta.textContent = packs.length ? `${packs.length} packs` : "0 packs";
+  elements.packList.innerHTML = "";
 
-async function loadTemplate(name = state.templateName) {
-  const data = await api(`/api/template?name=${encodeURIComponent(name)}`);
-  state.templateName = data.name;
-  state.template = data.template;
-}
-
-async function loadSlotSelections() {
-  if (!state.template) {
-    state.slotSelections = {};
+  if (!packs.length) {
+    elements.packList.innerHTML = `<article class="pack-card"><p>利用可能な素材パックはありません。</p></article>`;
     return;
   }
-  const data = await api("/api/slot-selection", {
-    method: "POST",
-    body: JSON.stringify({ template: state.template }),
-  });
-  state.slotSelections = Object.fromEntries((data.selections || []).map((selection) => [selection.slot_id, selection.asset]));
-  for (const warning of data.warnings || []) log(warning, "warn");
+
+  for (const pack of packs) {
+    const card = document.createElement("article");
+    card.className = "pack-card";
+    const isInstalling = state.installingPackId === pack.id;
+    const installed = Boolean(pack.installed);
+    card.innerHTML = `
+      <div>
+        <header>
+          <strong>${escapeHtml(pack.name || pack.id)}</strong>
+          <span>v${escapeHtml(pack.version || "-")}</span>
+        </header>
+        <p>${escapeHtml(pack.description || "")}</p>
+        <small>${installed ? "導入済み" : "未導入"}</small>
+      </div>
+      <button type="button" data-action="install-pack" data-pack-id="${escapeHtml(pack.id)}" ${installed || isInstalling ? "disabled" : ""}>
+        ${installed ? "導入済み" : isInstalling ? "導入中" : "インストール"}
+      </button>
+    `;
+    elements.packList.appendChild(card);
+  }
 }
 
-async function loadTimelineRoughCutStatus() {
-  try {
-    state.timelineRoughCut = await timelineApi("/api/status");
-    state.timelineBridgeError = state.timelineRoughCut.scripts_ready ? null : "必要なタイムライン用スクリプトが見つかりません";
-  } catch (error) {
-    state.timelineRoughCut = null;
-    state.timelineBridgeError = error.message;
-  }
+function renderAll() {
+  renderVoice();
+  renderTimeline();
+  renderAssets();
+  renderAssetPacks();
+  renderPreview();
+  elements.projectStatus.textContent = `${state.assets?.count || 0} assets`;
 }
 
 async function loadState() {
   const data = await api("/api/state");
-  state.templates = data.templates;
   state.assets = data.assets;
-  state.timeline = data.timeline;
   state.outputExists = data.outputExists;
-  if (!state.templates.includes(state.templateName)) state.templateName = state.templates[0] || state.templateName;
-  await loadTemplate(state.templateName);
-  await loadSlotSelections();
-  await loadTimelineRoughCutStatus();
+  state.exportClips = data.exportClips || [];
+  state.voice = await api("/api/voice/status");
+  state.timelineRenderState = await api("/api/timeline-render-state");
+  state.assetCatalog = await api("/api/asset-catalog");
   renderAll();
   log("loaded project state");
 }
 
-async function saveTemplate() {
-  const data = await api("/api/template", {
-    method: "PUT",
-    body: JSON.stringify({ name: state.templateName, template: readTemplateFromForm() }),
-  });
-  state.template = data.template;
-  await loadSlotSelections();
-  renderTemplate();
-  log(`saved ${state.templateName}`);
+async function installAssetPack(packId) {
+  state.installingPackId = packId;
+  renderAssetPacks();
+  log(`asset pack install started: ${packId}`);
+  try {
+    const result = await api("/api/assets/install", {
+      method: "POST",
+      body: JSON.stringify({ pack_id: packId }),
+    });
+    log(result.message);
+    const stateData = await api("/api/state");
+    state.assets = stateData.assets;
+    state.outputExists = stateData.outputExists;
+    state.exportClips = stateData.exportClips || [];
+    state.assetCatalog = await api("/api/asset-catalog");
+    renderAll();
+  } catch (error) {
+    log(`${error.message} 次の一手: ネット接続を確認し、もう一度インストールしてください。`, "error");
+  } finally {
+    state.installingPackId = null;
+    renderAssetPacks();
+  }
 }
 
-async function renderLegacyRoughCut() {
-  setBusy(true, "legacy");
-  log("旧テンプレート方式の生成を開始します。音声タイムライン方式ではありません。", "warn");
+async function chooseExportFolder() {
+  if (!window.showDirectoryPicker) {
+    throw new Error("このブラウザでは書き出し先フォルダを選択できません。ChromeまたはEdgeで開いてください。");
+  }
+  const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+  state.exportDirectoryHandle = handle;
+  state.exportDirectoryName = handle.name || "";
+  renderExportControls();
+  log(`書き出し先を選択しました: ${state.exportDirectoryName || "選択済みフォルダ"}`);
+}
+
+async function ensureExportFolderPermission(handle) {
+  if (!handle) return;
+  if (typeof handle.queryPermission === "function") {
+    const current = await handle.queryPermission({ mode: "readwrite" });
+    if (current === "granted") return;
+  }
+  if (typeof handle.requestPermission === "function") {
+    const requested = await handle.requestPermission({ mode: "readwrite" });
+    if (requested !== "granted") {
+      throw new Error("書き出し先フォルダへの保存が許可されませんでした。もう一度フォルダを選択してください。");
+    }
+  }
+}
+
+async function exportSelectedClips() {
+  if (!state.exportClips?.length) {
+    log("書き出しできる分割素材がありません。先に生成してください。", "warn");
+    return;
+  }
+  if (!state.exportDirectoryHandle) {
+    await chooseExportFolder();
+  }
+  await ensureExportFolderPermission(state.exportDirectoryHandle);
+  elements.exportButton.disabled = true;
+  elements.exportButton.textContent = "書き出し中";
   try {
-    const data = await api("/api/render", {
+    for (const clip of state.exportClips) {
+      const response = await fetch(clip.url);
+      if (!response.ok) {
+        throw new Error("分割素材を読み込めません。もう一度生成してください。");
+      }
+      const fileHandle = await state.exportDirectoryHandle.getFileHandle(clip.name, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(await response.blob());
+      await writable.close();
+    }
+    log(`分割素材を書き出しました: ${state.exportClips.length}本`);
+  } finally {
+    renderExportControls();
+  }
+}
+
+async function generateVoice() {
+  const text = elements.voiceText.value.trim();
+  elements.voiceGenerateButton.disabled = true;
+  elements.voiceGenerateButton.textContent = "生成中";
+  elements.voiceMeta.textContent = "音声生成中";
+  try {
+    const result = await api("/api/voice/generate", {
       method: "POST",
-      body: JSON.stringify({ template: readTemplateFromForm(), assetSelections: readAssetSelectionsFromForm() }),
+      body: JSON.stringify({ text }),
     });
-    state.timeline = data.timeline;
-    state.outputExists = true;
-    for (const warning of data.warnings || []) log(warning, "warn");
-    renderTimeline();
-    renderPreview(data.outputUrl);
-    log("旧テンプレート生成が完了しました", "warn");
+    state.voice = {
+      ...(state.voice || {}),
+      configured: true,
+      api_key_configured: true,
+      voice_id_configured: true,
+      audio_exists: true,
+      audio_path: result.audio_path,
+      timestamps_path: result.timestamps_path,
+      audio_url: result.audio_url,
+    };
+    renderVoice();
+    log(`${result.message}: ${result.audio_path}`);
   } catch (error) {
+    elements.voiceMeta.textContent = error.message;
     log(error.message, "error");
   } finally {
-    setBusy(false);
+    elements.voiceGenerateButton.disabled = false;
+    elements.voiceGenerateButton.textContent = "音声生成";
+  }
+}
+
+async function mergeTimestamps() {
+  elements.mergeTimestampsButton.disabled = true;
+  elements.mergeTimestampsButton.textContent = "結合中";
+  elements.voiceMeta.textContent = "timestamps結合中";
+  try {
+    const result = await api("/api/script/merge-timestamps", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    elements.voiceMeta.textContent = `${result.script_path} / ${result.timeline_path}`;
+    log(`${result.message}: ${result.segment_count} segments`);
+  } catch (error) {
+    elements.voiceMeta.textContent = error.message;
+    log(error.message, "error");
+  } finally {
+    elements.mergeTimestampsButton.disabled = false;
+    elements.mergeTimestampsButton.textContent = "timestamps結合";
   }
 }
 
 async function renderTimelineRoughCut() {
-  setBusy(true, "timeline");
-  log("音声タイムライン方式: 台帳確認 → 自動割当 → rough_cut.mp4 を開始しました");
+  setBusy(true);
+  log("音声タイムライン生成を開始");
+  log("素材台帳を変換");
   try {
-    const data = await timelineApi("/api/render", { method: "POST", body: "{}" });
-    state.timelineRoughCut = data;
-    state.timelineBridgeError = null;
-    state.outputExists = Boolean(data.output_exists);
-    for (const chunk of data.logs || []) log(chunk);
+    const data = await api("/api/timeline-render", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    state.timelineRenderState = {
+      inProgress: false,
+      scripts: { adapt_asset_manifest: true, build_timeline_roughcut: true },
+      outputExists: data.outputExists,
+      outputUrl: data.outputUrl,
+      manifestCheck: data.manifestCheck,
+      plan: data.plan,
+    };
+    state.outputExists = data.outputExists;
+    state.exportClips = data.exportClips || [];
+    log(`${data.manifestCheck?.video_count || data.plan?.recognized_video_count || 0}素材を認識`);
+    log(`${data.plan?.segment_count || 0} segmentsへ素材を割当`);
+    log("rough_cut.mp4を生成");
     renderTimeline();
-    renderPreview(data.output_url);
-    log("音声タイムライン・ラフカット生成が完了しました");
+    renderPreview(data.outputUrl);
+    log("完了");
   } catch (error) {
-    state.timelineBridgeError = error.message;
-    renderTimeline();
+    for (const scriptLog of error.logs || []) {
+      log(scriptLog, "error");
+    }
     log(error.message, "error");
   } finally {
     setBusy(false);
   }
 }
 
-function setBusy(isBusy, mode = "") {
-  elements.renderButton.disabled = isBusy;
+function setBusy(isBusy) {
   elements.timelineRenderButton.disabled = isBusy;
-  elements.saveButton.disabled = isBusy;
   elements.reloadButton.disabled = isBusy;
-  elements.renderButton.textContent = isBusy && mode === "legacy" ? "旧方式生成中" : "旧テンプレート生成";
-  elements.timelineRenderButton.textContent = isBusy && mode === "timeline" ? "音声タイムライン生成中" : "音声タイムライン生成";
-  elements.projectStatus.textContent = isBusy ? "生成中" : `${state.templateName} / ${state.assets?.count || 0} assets`;
+  elements.voiceGenerateButton.disabled = isBusy;
+  elements.mergeTimestampsButton.disabled = isBusy;
+  elements.exportFolderButton.disabled = isBusy;
+  elements.exportButton.disabled = isBusy || !state.exportClips?.length;
+  elements.timelineRenderButton.textContent = isBusy ? "生成中" : "音声タイムライン生成";
+  elements.exportButton.textContent = isBusy ? "書き出し" : (state.exportClips?.length ? `書き出し (${state.exportClips.length})` : "書き出し");
+  elements.projectStatus.textContent = isBusy ? "生成中" : `${state.assets?.count || 0} assets`;
 }
 
-elements.reloadButton.addEventListener("click", () => loadState().catch((error) => log(error.message, "error")));
-elements.saveButton.addEventListener("click", () => saveTemplate().catch((error) => log(error.message, "error")));
-elements.renderButton.addEventListener("click", renderLegacyRoughCut);
-elements.timelineRenderButton.addEventListener("click", renderTimelineRoughCut);
-elements.templateSelect.addEventListener("change", async (event) => {
-  state.templateName = event.target.value;
-  await loadTemplate(state.templateName);
-  await loadSlotSelections();
-  renderAll();
-  log(`selected ${state.templateName}`);
+elements.reloadButton.addEventListener("click", () => {
+  loadState().catch((error) => log(error.message, "error"));
 });
+
+elements.timelineRenderButton.addEventListener("click", renderTimelineRoughCut);
+
+elements.voiceGenerateButton.addEventListener("click", () => {
+  generateVoice().catch((error) => log(error.message, "error"));
+});
+
+elements.mergeTimestampsButton.addEventListener("click", () => {
+  mergeTimestamps().catch((error) => log(error.message, "error"));
+});
+
+elements.exportFolderButton.addEventListener("click", () => {
+  chooseExportFolder().catch((error) => log(error.message, "error"));
+});
+
+elements.exportButton.addEventListener("click", () => {
+  exportSelectedClips().catch((error) => log(error.message, "error"));
+});
+
+elements.packList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-action='install-pack']");
+  if (!button || button.disabled) {
+    return;
+  }
+  installAssetPack(button.dataset.packId).catch((error) => log(error.message, "error"));
+});
+
 elements.clearLogButton.addEventListener("click", () => {
   elements.logOutput.textContent = "";
 });

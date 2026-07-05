@@ -1,7 +1,0 @@
-﻿slot_id,label,start,end,duration,folder,asset,speed
-hook_01,まず止める,0,1.8,1.8,assets/hook/beauty_stop,assets/hook/beauty_stop/beauty_stop_glass_strawberry_shining_012.mp4,1.5
-hook_02,広げる,1.8,3.3,1.5,assets/hook/expand,assets/hook/expand/expand_cyberpunk_city_viewing_024.mp4,4.027778
-hook_03,AI文脈接続,3.3,4.5,1.2,assets/hook/ai_context,assets/hook/ai_context/ai_context_chatgpt_icon_typing_001.mp4,5.034723
-hook_04,人で安心させる,4.5,8,3.5,assets/hook/human_safe,assets/hook/human_safe/human_safe_chess_king_standing_018.mp4,1.726191
-body_01,本題背景,8,22,14,assets/body/main_bg,assets/body/main_bg/main_bg_chatgpt_workspace_001.mp4,1.004762
-cta_01,キャプション誘導,22,25,3,assets/cta/caption_prompt,assets/cta/caption_prompt/cta_caption_luxury_car_getting_in_031.mp4,2.013889

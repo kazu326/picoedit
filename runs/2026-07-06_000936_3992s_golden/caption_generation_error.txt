@@ -1,0 +1,17 @@
+C:\Users\kukyo\Documents\picoedit\scripts\generate_caption_cues.js:294
+    throw new Error(`字幕尺が範囲外です: ${badDuration.id} ${badDuration.duration_sec}`);
+    ^
+
+Error: 字幕尺が範囲外です: caption_010 0.96
+    at validate (C:\Users\kukyo\Documents\picoedit\scripts\generate_caption_cues.js:294:11)
+    at Object.<anonymous> (C:\Users\kukyo\Documents\picoedit\scripts\generate_caption_cues.js:311:20)
+    at Module._compile (node:internal/modules/cjs/loader:1761:14)
+    at Object..js (node:internal/modules/cjs/loader:1893:10)
+    at Module.load (node:internal/modules/cjs/loader:1481:32)
+    at Module._load (node:internal/modules/cjs/loader:1300:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+
+Node.js v24.11.1

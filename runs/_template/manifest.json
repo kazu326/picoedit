@@ -1,0 +1,40 @@
+{
+  "run_id": "YYYY-MM-DD_HHMMSS_slug",
+  "created_at": "ISO-8601",
+  "git_commit": "",
+  "source_script": "",
+  "voice": {
+    "path_at_capture": "input/voice.mp3",
+    "archived_copy": "runs/<run_id>/input/voice.mp3",
+    "duration_sec": 0,
+    "size_bytes": 0,
+    "mtime_iso": "",
+    "sha256": ""
+  },
+  "timeline": {
+    "path": "output/timeline_with_captions.json",
+    "segment_count": 0,
+    "caption_cue_count": 0,
+    "final_segment_end_sec": 0,
+    "final_caption_end_sec": 0
+  },
+  "assets": {
+    "manifest_path": "output/asset_manifest_for_renderer.json",
+    "recognized_video_count": 0,
+    "missing_count": 0
+  },
+  "render": {
+    "selected_clip_count": 0,
+    "rough_cut_path": "output/rough_cut.mp4",
+    "duration_sec": 0,
+    "sha256": ""
+  },
+  "quality": {
+    "status": "pass",
+    "voice_to_segment_diff_sec": 0,
+    "voice_to_caption_diff_sec": 0,
+    "voice_to_render_diff_sec": 0,
+    "segment_to_render_diff_sec": 0,
+    "notes": []
+  }
+}

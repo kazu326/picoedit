@@ -1,8 +1,26 @@
 # Local FFmpeg binaries are too large for GitHub's 100 MB file limit.
 tools/ffmpeg/bin/*.exe
 
+# Local secrets and installed dependencies.
+.env
+node_modules/
+
 # Generated render outputs.
 output/*.mp4
+output/*.zip
+output/*.json
+output/*.ass
+output/*.jpg
+output/*.txt
+output/selected_assets/
+output/selected_clips/
+output/selection.json
+output/rough_cut_edit_list.csv
+
+# Local voice inputs and installed asset packs.
+input/*.mp3
+assets/asset_manifest.json
+assets/core_ai_education/
 
 # Python cache files.
 __pycache__/

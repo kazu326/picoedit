@@ -19,11 +19,10 @@
           <p id="projectStatus">読み込み中</p>
         </div>
         <div class="toolbar">
-          <select id="templateSelect" aria-label="テンプレート"></select>
           <button id="reloadButton" type="button" title="再読込">再読込</button>
-          <button id="saveButton" type="button" title="テンプレート保存">保存</button>
-          <button id="renderButton" type="button" title="旧テンプレート方式。音声タイムラインは使いません。">旧テンプレート生成</button>
-          <button id="timelineRenderButton" class="primary" type="button" title="音声・字幕タイムラインと役割別素材からラフカットを生成">音声タイムライン生成</button>
+          <button id="timelineRenderButton" class="primary" type="button" title="timeline_with_captions.json と音声実時間を基準に生成">音声タイムライン生成</button>
+          <button id="exportFolderButton" type="button" title="書き出し先フォルダ選択">書き出し先</button>
+          <button id="exportButton" type="button" title="編集済み分割素材を書き出し" disabled>書き出し</button>
         </div>
       </header>
 
@@ -31,7 +30,10 @@
         <section class="panel preview-panel">
           <div class="panel-head">
             <h2>プレビュー</h2>
-            <span id="outputMeta">-</span>
+            <div class="panel-head-actions">
+              <span id="outputMeta">-</span>
+              <a id="singleVideoButton" class="button-link compact" href="/media/output/rough_cut.mp4" download="rough_cut.mp4" aria-disabled="true">1本動画を保存</a>
+            </div>
           </div>
           <div class="preview-frame">
             <video id="previewVideo" controls playsinline preload="metadata"></video>
@@ -39,49 +41,26 @@
           </div>
         </section>
 
-        <section class="panel template-panel">
+        <section class="panel voice-panel">
           <div class="panel-head">
-            <h2>旧テンプレート設定</h2>
-            <div class="template-fields">
-              <label>
-                ID
-                <input id="templateId" type="text">
-              </label>
-              <label>
-                サイズ
-                <input id="outputSize" type="text">
-              </label>
-              <label>
-                FPS
-                <input id="fps" type="number" min="1" step="1">
-              </label>
-            </div>
+            <h2>音声生成</h2>
+            <span id="voiceStatus">確認中</span>
           </div>
-          <div class="slot-table-wrap">
-            <table class="slot-table">
-              <thead>
-                <tr>
-                  <th>slot</th>
-                  <th>label</th>
-                  <th>folder</th>
-                  <th>sec</th>
-                  <th>selected asset</th>
-                  <th>preview</th>
-                  <th>change</th>
-                </tr>
-              </thead>
-              <tbody id="slotRows"></tbody>
-            </table>
+          <div class="voice-body">
+            <textarea id="voiceText" rows="5" placeholder="音声にする文章を入力"></textarea>
+            <div class="voice-actions">
+              <button id="voiceGenerateButton" type="button">音声生成</button>
+              <button id="mergeTimestampsButton" type="button">timestamps結合</button>
+              <span id="voiceMeta">-</span>
+            </div>
+            <audio id="voiceAudio" controls hidden></audio>
           </div>
         </section>
 
         <section class="panel timeline-panel">
           <div class="panel-head">
-            <div>
-              <h2>音声タイムライン・ラフカット</h2>
-              <span id="timelineMeta">-</span>
-            </div>
-            <span id="timelinePipelineMeta">timeline_with_captions.json → 素材 → rough_cut.mp4</span>
+            <h2>タイムライン</h2>
+            <span id="timelineMeta">-</span>
           </div>
           <div id="timelineRows" class="timeline-rows"></div>
         </section>
@@ -92,6 +71,14 @@
             <span id="assetMeta">-</span>
           </div>
           <div id="assetFolders" class="asset-folders"></div>
+        </section>
+
+        <section class="panel packs-panel">
+          <div class="panel-head">
+            <h2>素材パック</h2>
+            <span id="packMeta">読み込み中</span>
+          </div>
+          <div id="packList" class="pack-list"></div>
         </section>
 
         <section class="panel log-panel">

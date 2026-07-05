@@ -26,13 +26,15 @@ body {
 
 button,
 input,
-select {
+select,
+.button-link {
   font: inherit;
 }
 
 button,
 select,
-input {
+input,
+.button-link {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: #fff;
@@ -54,6 +56,31 @@ button:disabled {
   opacity: 0.55;
 }
 
+.button-link {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  text-decoration: none;
+}
+
+.button-link:hover {
+  border-color: #9fafaa;
+}
+
+.button-link[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.button-link.compact {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
 button.primary {
   border-color: var(--accent);
   background: var(--accent);
@@ -68,6 +95,18 @@ input,
 select {
   min-height: 36px;
   padding: 0 10px;
+}
+
+textarea {
+  width: 100%;
+  min-height: 112px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
 }
 
 .app-shell {
@@ -115,6 +154,14 @@ h2 {
   font-size: 13px;
 }
 
+.panel-head-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -123,16 +170,13 @@ h2 {
   gap: 8px;
 }
 
-.toolbar select {
-  min-width: 190px;
-}
-
 .workspace {
   display: grid;
   grid-template-columns: minmax(310px, 440px) minmax(0, 1fr);
   grid-template-areas:
-    "preview template"
+    "preview voice"
     "preview timeline"
+    "assets packs"
     "assets log";
   gap: 14px;
   width: min(1480px, 100%);
@@ -150,6 +194,7 @@ h2 {
 
 .panel-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
@@ -161,16 +206,20 @@ h2 {
   grid-area: preview;
 }
 
-.template-panel {
-  grid-area: template;
-}
-
 .timeline-panel {
   grid-area: timeline;
 }
 
+.voice-panel {
+  grid-area: voice;
+}
+
 .assets-panel {
   grid-area: assets;
+}
+
+.packs-panel {
+  grid-area: packs;
 }
 
 .log-panel {
@@ -210,13 +259,6 @@ h2 {
   display: none;
 }
 
-.template-fields {
-  display: grid;
-  grid-template-columns: minmax(120px, 1fr) 110px 76px;
-  gap: 8px;
-  width: min(100%, 420px);
-}
-
 label {
   display: grid;
   gap: 5px;
@@ -224,92 +266,33 @@ label {
   font-size: 12px;
 }
 
-.slot-table-wrap {
-  overflow-x: auto;
+.voice-body {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
 }
 
-.slot-table {
-  width: 100%;
-  min-width: 1160px;
-  border-collapse: collapse;
+.voice-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.slot-table th,
-.slot-table td {
-  padding: 10px;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-  vertical-align: middle;
-}
-
-.slot-table th {
+.voice-actions span {
+  min-width: 0;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.slot-id {
-  width: 110px;
-  color: #26312c;
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 13px;
-}
-
-.slot-table input,
-.slot-table select {
-  width: 100%;
-}
-
-.slot-table input[type="number"] {
-  width: 82px;
-}
-
-.asset-cell {
-  min-width: 250px;
-}
-
-.asset-cell strong {
-  display: block;
-  max-width: 280px;
-  overflow-wrap: anywhere;
-  font-size: 13px;
-}
-
-.asset-cell p {
-  margin-top: 4px;
-  max-width: 300px;
-  color: var(--muted);
-  font-family: Consolas, "Courier New", monospace;
   font-size: 12px;
   overflow-wrap: anywhere;
 }
 
-.slot-preview-video {
-  display: block;
-  width: 86px;
-  aspect-ratio: 9 / 16;
-  border: 1px solid #222a25;
-  border-radius: 6px;
-  background: #0c100e;
-  object-fit: cover;
-}
-
-.asset-actions {
-  width: 230px;
-}
-
-.asset-actions button,
-.asset-actions select {
+#voiceAudio {
   width: 100%;
-}
-
-.asset-picker {
-  margin-top: 8px;
 }
 
 .timeline-rows,
-.asset-folders {
+.asset-folders,
+.pack-list {
   display: grid;
   gap: 8px;
   padding: 12px;
@@ -318,7 +301,8 @@ label {
 }
 
 .timeline-row,
-.asset-folder {
+.asset-folder,
+.pack-card {
   display: grid;
   gap: 5px;
   padding: 10px;
@@ -328,7 +312,8 @@ label {
 }
 
 .timeline-row header,
-.asset-folder header {
+.asset-folder header,
+.pack-card header {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -338,11 +323,31 @@ label {
 }
 
 .timeline-row p,
-.asset-folder p {
+.asset-folder p,
+.pack-card p {
   color: var(--muted);
   font-family: Consolas, "Courier New", monospace;
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+.pack-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  background: #fbfcf9;
+}
+
+.pack-card p {
+  margin-top: 5px;
+  font-family: inherit;
+  line-height: 1.45;
+}
+
+.pack-card small {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .asset-folder ul {
@@ -392,17 +397,14 @@ label {
     grid-template-columns: 1fr;
     grid-template-areas:
       "preview"
-      "template"
+      "voice"
       "timeline"
       "assets"
+      "packs"
       "log";
   }
 
   .preview-frame {
     width: min(100%, 330px);
-  }
-
-  .template-fields {
-    grid-template-columns: 1fr;
   }
 }
