@@ -214,8 +214,10 @@ function postProcessCues(cues) {
     const group = [cues[index]];
     let next = cues[index + 1];
     const text = cues[index].text;
+    const mergedDuration = next ? roundTime(next.end - cues[index].start) : 0;
     if (
       next &&
+      mergedDuration <= 3.4 &&
       (/^[、，,]/.test(text) ||
         /^[。！？!?]+$/.test(text) ||
         (text.endsWith("ま") && next.text.startsWith("す")) ||
@@ -230,7 +232,7 @@ function postProcessCues(cues) {
 
   const last = result[result.length - 1];
   const previous = result[result.length - 2];
-  if (last && previous && last.duration_sec < 1.2) {
+  if (last && previous && last.duration_sec < 1.2 && roundTime(last.end - previous.start) <= 3.4) {
     result.splice(result.length - 2, 2, rebuildCue([previous, last], result.length - 2));
   }
 

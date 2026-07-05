@@ -11,6 +11,7 @@ output/*.zip
 output/*.json
 output/*.ass
 output/*.jpg
+output/*.txt
 output/selected_assets/
 output/selected_clips/
 output/selection.json

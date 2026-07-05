@@ -13,7 +13,6 @@ const PROJECT_ROOT = __dirname;
 const WEB_ROOT = path.join(PROJECT_ROOT, "web");
 const OUTPUT_DIR = path.join(PROJECT_ROOT, "output");
 const SELECTED_CLIPS_DIR = path.join(OUTPUT_DIR, "selected_clips");
-const TEMPLATE_DIR = path.join(PROJECT_ROOT, "templates");
 const ASSET_DIR = path.join(PROJECT_ROOT, "assets");
 const INPUT_DIR = path.join(PROJECT_ROOT, "input");
 const CONFIG_DIR = path.join(PROJECT_ROOT, "config");
@@ -32,8 +31,8 @@ const ASSET_MANIFEST_PATH = path.join(ASSET_DIR, "asset_manifest.json");
 const ASSET_PACK_HOST = ASSET_CATALOG_HOST;
 const ASSET_PACK_PATH_PREFIX = "/packs/";
 
-let renderInProgress = false;
 let voiceInProgress = false;
+let timelineRenderInProgress = false;
 
 function loadEnvFileOnce() {
   if (!fs.existsSync(ENV_PATH) || typeof process.loadEnvFile !== "function") {
@@ -51,10 +50,6 @@ loadEnvFileOnce();
 function toProjectPath(filePath) {
   const relative = path.relative(PROJECT_ROOT, filePath);
   return relative.split(path.sep).join("/");
-}
-
-function fromProjectPath(projectPath) {
-  return path.resolve(PROJECT_ROOT, projectPath);
 }
 
 function assertInsideRoot(filePath, root = PROJECT_ROOT) {
@@ -660,249 +655,6 @@ async function probeDuration(ffprobe, filePath) {
   return duration;
 }
 
-function validateTemplate(template) {
-  if (!template || typeof template !== "object" || Array.isArray(template)) {
-    throw new Error("Template must be a JSON object.");
-  }
-  for (const key of ["template_id", "output_size", "fps", "slots"]) {
-    if (!(key in template)) {
-      throw new Error(`Template is missing required field: ${key}`);
-    }
-  }
-  const [widthText, heightText] = String(template.output_size).toLowerCase().split("x");
-  const width = Number.parseInt(widthText, 10);
-  const height = Number.parseInt(heightText, 10);
-  const fps = Number.parseFloat(template.fps);
-  if (!Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(fps)) {
-    throw new Error("Template output_size and fps must be valid numbers.");
-  }
-  if (width <= 0 || height <= 0 || fps <= 0) {
-    throw new Error("Template output_size and fps must be greater than zero.");
-  }
-  if (!Array.isArray(template.slots) || template.slots.length === 0) {
-    throw new Error("Template slots must be a non-empty array.");
-  }
-
-  const slots = template.slots.map((slot, index) => {
-    if (!slot || typeof slot !== "object" || Array.isArray(slot)) {
-      throw new Error(`Slot #${index + 1} must be a JSON object.`);
-    }
-    for (const key of ["slot_id", "label", "folder", "target_duration"]) {
-      if (!(key in slot)) {
-        throw new Error(`Slot #${index + 1} is missing required field: ${key}`);
-      }
-    }
-    const targetDuration = Number.parseFloat(slot.target_duration);
-    if (!Number.isFinite(targetDuration) || targetDuration <= 0) {
-      throw new Error(`Slot '${slot.slot_id}' target_duration must be greater than zero.`);
-    }
-    const folder = fromProjectPath(String(slot.folder));
-    assertInsideRoot(folder, ASSET_DIR);
-    return {
-      slot_id: String(slot.slot_id),
-      label: String(slot.label),
-      folder: toProjectPath(folder),
-      target_duration: targetDuration,
-    };
-  });
-
-  return {
-    template_id: String(template.template_id),
-    output_size: `${width}x${height}`,
-    fps,
-    slots,
-    _width: width,
-    _height: height,
-  };
-}
-
-async function listVideoFiles(folderPath) {
-  const entries = await fsp.readdir(folderPath, { withFileTypes: true });
-  return entries
-    .filter((entry) => entry.isFile())
-    .map((entry) => path.join(folderPath, entry.name))
-    .filter(isVideo)
-    .sort((a, b) => path.basename(a).localeCompare(path.basename(b), "en"));
-}
-
-async function findAsset(ffprobe, folderPath, targetDuration, usedAssets, slotId) {
-  const videos = await listVideoFiles(folderPath);
-  if (videos.length === 0) {
-    throw new Error(`No video files were found in asset folder: ${toProjectPath(folderPath)}`);
-  }
-  const unused = videos.filter((filePath) => !usedAssets.has(path.resolve(filePath)));
-  if (unused.length === 0) {
-    throw new Error(`No unused videos remain in asset folder: ${toProjectPath(folderPath)}`);
-  }
-
-  let fallback = null;
-  for (const candidate of unused) {
-    const duration = await probeDuration(ffprobe, candidate);
-    fallback ||= { filePath: candidate, duration };
-    if (duration >= targetDuration) {
-      return { filePath: candidate, duration, warning: null };
-    }
-  }
-
-  return {
-    ...fallback,
-    warning: `Slot '${slotId}' has no unused asset at least ${targetDuration.toFixed(3)}s long. Using ${toProjectPath(fallback.filePath)} at normal speed.`,
-  };
-}
-
-function selectedAssetPath(assetSelections, slotId) {
-  if (!assetSelections || typeof assetSelections !== "object") {
-    return null;
-  }
-  const selection = assetSelections[slotId];
-  if (!selection) {
-    return null;
-  }
-  const filePath = assertInsideRoot(fromProjectPath(String(selection)), ASSET_DIR);
-  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile() || !isVideo(filePath)) {
-    throw new Error(`Selected asset is not a video file: ${selection}`);
-  }
-  return filePath;
-}
-
-async function selectSlotAsset(ffprobe, slot, usedAssets, assetSelections) {
-  const manualAsset = selectedAssetPath(assetSelections, slot.slot_id);
-  if (manualAsset) {
-    const duration = await probeDuration(ffprobe, manualAsset);
-    const warning =
-      duration < slot.target_duration
-        ? `Slot '${slot.slot_id}' selected asset is shorter than ${slot.target_duration.toFixed(3)}s: ${toProjectPath(manualAsset)}`
-        : null;
-    return { filePath: manualAsset, duration, warning, manual: true };
-  }
-
-  const folderPath = fromProjectPath(slot.folder);
-  if (!fs.existsSync(folderPath)) {
-    throw new Error(`Asset folder does not exist: ${slot.folder}`);
-  }
-  const selected = await findAsset(
-    ffprobe,
-    folderPath,
-    slot.target_duration,
-    usedAssets,
-    slot.slot_id
-  );
-  usedAssets.add(path.resolve(selected.filePath));
-  return { ...selected, manual: false };
-}
-
-async function defaultSlotSelections(rawTemplate) {
-  const template = validateTemplate(rawTemplate);
-  const ffprobe = ffmpegPath("ffprobe");
-  const usedAssets = new Set();
-  const selections = [];
-  const warnings = [];
-
-  for (const slot of template.slots) {
-    const selected = await selectSlotAsset(ffprobe, slot, usedAssets, null);
-    if (selected.warning) {
-      warnings.push(selected.warning);
-    }
-    selections.push({
-      slot_id: slot.slot_id,
-      asset: toProjectPath(selected.filePath),
-      assetName: path.basename(selected.filePath),
-      url: `/media/${toProjectPath(selected.filePath)}`,
-      duration: Number(selected.duration.toFixed(6)),
-    });
-  }
-
-  return { selections, warnings };
-}
-
-async function makeSegment(options) {
-  const {
-    ffmpeg,
-    ffprobe,
-    source,
-    destination,
-    speed,
-    duration,
-    width,
-    height,
-    fps,
-    slotId,
-  } = options;
-  const videoFilter = [
-    `setpts=(PTS-STARTPTS)/${speed.toFixed(12)}`,
-    `trim=duration=${duration.toFixed(12)}`,
-    "setpts=PTS-STARTPTS",
-    `scale=${width}:${height}:force_original_aspect_ratio=increase`,
-    `crop=${width}:${height}`,
-    `fps=${fps}`,
-    "setsar=1",
-  ].join(",");
-
-  await runCommand(
-    ffmpeg,
-    [
-      "-y",
-      "-i",
-      source,
-      "-an",
-      "-vf",
-      videoFilter,
-      "-t",
-      duration.toFixed(12),
-      "-c:v",
-      "libx264",
-      "-preset",
-      "medium",
-      "-crf",
-      "18",
-      "-pix_fmt",
-      "yuv420p",
-      "-movflags",
-      "+faststart",
-      destination,
-    ],
-    `FFmpeg segment build for slot '${slotId}'`
-  );
-  return probeDuration(ffprobe, destination);
-}
-
-function concatLine(filePath) {
-  const escaped = path.resolve(filePath).split(path.sep).join("/").replaceAll("'", "'\\''");
-  return `file '${escaped}'`;
-}
-
-async function concatSegments(ffmpeg, concatFile, outputPath, voicePath, videoDuration) {
-  const args = ["-y", "-f", "concat", "-safe", "0", "-i", concatFile];
-  if (voicePath && fs.existsSync(voicePath)) {
-    args.push(
-      "-i",
-      voicePath,
-      "-map",
-      "0:v:0",
-      "-map",
-      "1:a:0",
-      "-c:v",
-      "copy",
-      "-c:a",
-      "aac",
-      "-t",
-      videoDuration.toFixed(12)
-    );
-  } else {
-    args.push("-c", "copy");
-  }
-  args.push("-movflags", "+faststart", outputPath);
-  await runCommand(ffmpeg, args, "FFmpeg final concatenation");
-}
-
-function csvValue(value) {
-  const text = String(value ?? "");
-  if (/[",\r\n]/.test(text)) {
-    return `"${text.replaceAll('"', '""')}"`;
-  }
-  return text;
-}
-
 function voiceAudioPath() {
   return path.join(INPUT_DIR, "voice.mp3");
 }
@@ -1287,13 +1039,6 @@ async function generateElevenLabsVoice(text) {
   };
 }
 
-function safeClipFileName(index, slotId) {
-  const safeSlotId = String(slotId || "slot")
-    .replace(/[^A-Za-z0-9_-]+/g, "_")
-    .replace(/^_+|_+$/g, "") || "slot";
-  return `${String(index + 1).padStart(2, "0")}_${safeSlotId}.mp4`;
-}
-
 async function listExportClips() {
   if (!fs.existsSync(SELECTED_CLIPS_DIR)) {
     return [];
@@ -1314,145 +1059,6 @@ async function listExportClips() {
     });
   }
   return clips.sort((a, b) => a.name.localeCompare(b.name, "en"));
-}
-
-async function publishSelectedClips(segmentSources) {
-  await fsp.rm(SELECTED_CLIPS_DIR, { recursive: true, force: true });
-  await fsp.mkdir(SELECTED_CLIPS_DIR, { recursive: true });
-  for (const segment of segmentSources) {
-    const targetPath = path.join(SELECTED_CLIPS_DIR, segment.fileName);
-    await fsp.copyFile(segment.sourcePath, targetPath);
-    segment.timeline.clip = toProjectPath(targetPath);
-  }
-  return listExportClips();
-}
-
-async function writeOutputs(templateId, segments) {
-  const timeline = {
-    template_id: templateId,
-    output: "output/rough_cut.mp4",
-    segments,
-  };
-  await fsp.mkdir(OUTPUT_DIR, { recursive: true });
-  await fsp.writeFile(
-    path.join(OUTPUT_DIR, "timeline.json"),
-    `${JSON.stringify(timeline, null, 2)}\n`,
-    "utf8"
-  );
-
-  const fields = ["slot_id", "label", "start", "end", "duration", "folder", "asset", "speed"];
-  const csv = [
-    fields.join(","),
-    ...segments.map((segment) => fields.map((field) => csvValue(segment[field])).join(",")),
-  ].join("\r\n");
-  await fsp.writeFile(path.join(OUTPUT_DIR, "edit_list.csv"), `\uFEFF${csv}\r\n`, "utf8");
-  return timeline;
-}
-
-async function buildRoughCut(rawTemplate, assetSelections = null) {
-  const template = validateTemplate(rawTemplate);
-  const ffmpeg = ffmpegPath("ffmpeg");
-  const ffprobe = ffmpegPath("ffprobe");
-  const outputPath = path.join(OUTPUT_DIR, "rough_cut.mp4");
-  const voicePath = existingVoicePath();
-  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "picoedit_"));
-  const usedAssets = new Set();
-  const segments = [];
-  const warnings = [];
-  const segmentPaths = [];
-  const segmentSources = [];
-  let currentStart = 0;
-
-  try {
-    for (const [index, slot] of template.slots.entries()) {
-      const selected = await selectSlotAsset(ffprobe, slot, usedAssets, assetSelections);
-      if (selected.warning) {
-        warnings.push(selected.warning);
-      }
-
-      const speed = Math.max(selected.duration / slot.target_duration, 1);
-      const intendedDuration = Math.min(selected.duration, slot.target_duration);
-      const segmentFileName = safeClipFileName(index, slot.slot_id);
-      const segmentPath = path.join(tempDir, segmentFileName);
-      const actualDuration = await makeSegment({
-        ffmpeg,
-        ffprobe,
-        source: selected.filePath,
-        destination: segmentPath,
-        speed,
-        duration: intendedDuration,
-        width: template._width,
-        height: template._height,
-        fps: template.fps,
-        slotId: slot.slot_id,
-      });
-      segmentPaths.push(segmentPath);
-
-      const end = currentStart + actualDuration;
-      const timelineSegment = {
-        slot_id: slot.slot_id,
-        label: slot.label,
-        start: Number(currentStart.toFixed(6)),
-        end: Number(end.toFixed(6)),
-        duration: Number(actualDuration.toFixed(6)),
-        folder: toProjectPath(path.dirname(selected.filePath)),
-        asset: toProjectPath(selected.filePath),
-        speed: Number(speed.toFixed(6)),
-      };
-      segments.push(timelineSegment);
-      segmentSources.push({
-        sourcePath: segmentPath,
-        fileName: segmentFileName,
-        timeline: timelineSegment,
-      });
-      currentStart = end;
-    }
-
-    const concatFile = path.join(tempDir, "concat.txt");
-    await fsp.writeFile(concatFile, `${segmentPaths.map(concatLine).join("\n")}\n`, "utf8");
-    await concatSegments(ffmpeg, concatFile, outputPath, voicePath, currentStart);
-    var exportClips = await publishSelectedClips(segmentSources);
-  } finally {
-    await fsp.rm(tempDir, { recursive: true, force: true });
-  }
-
-  const timeline = await writeOutputs(template.template_id, segments);
-  return {
-    timeline,
-    warnings,
-    exportClips,
-    outputUrl: `/media/output/rough_cut.mp4?v=${Date.now()}`,
-  };
-}
-
-async function listTemplates() {
-  await fsp.mkdir(TEMPLATE_DIR, { recursive: true });
-  const entries = await fsp.readdir(TEMPLATE_DIR, { withFileTypes: true });
-  return entries
-    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".json"))
-    .map((entry) => entry.name)
-    .sort((a, b) => a.localeCompare(b, "en"));
-}
-
-async function readTemplate(templateName) {
-  const safeName = path.basename(templateName || "ai_prompt_30s.json");
-  const templatePath = assertInsideRoot(path.join(TEMPLATE_DIR, safeName), TEMPLATE_DIR);
-  const text = await fsp.readFile(templatePath, "utf8");
-  return JSON.parse(text);
-}
-
-async function saveTemplate(templateName, template) {
-  const safeName = path.basename(templateName || "ai_prompt_30s.json");
-  const templatePath = assertInsideRoot(path.join(TEMPLATE_DIR, safeName), TEMPLATE_DIR);
-  const validated = validateTemplate(template);
-  const cleanTemplate = {
-    template_id: validated.template_id,
-    output_size: validated.output_size,
-    fps: validated.fps,
-    slots: validated.slots,
-  };
-  await fsp.writeFile(templatePath, `${JSON.stringify(cleanTemplate, null, 2)}\n`, "utf8");
-  return cleanTemplate;
 }
 
 async function walkAssets(dir = ASSET_DIR) {
@@ -1498,12 +1104,106 @@ async function assetSummary() {
   };
 }
 
-async function readTimeline() {
-  const timelinePath = path.join(OUTPUT_DIR, "timeline.json");
-  if (!fs.existsSync(timelinePath)) {
+async function readJsonIfExists(filePath) {
+  if (!fs.existsSync(filePath)) {
     return null;
   }
-  return JSON.parse(await fsp.readFile(timelinePath, "utf8"));
+  return JSON.parse(await fsp.readFile(filePath, "utf8"));
+}
+
+function timelineRenderPaths() {
+  return {
+    adaptScript: path.join(PROJECT_ROOT, "scripts", "adapt_asset_manifest.js"),
+    buildScript: path.join(PROJECT_ROOT, "scripts", "build_timeline_roughcut.js"),
+    manifestCheck: path.join(OUTPUT_DIR, "asset_manifest_check.json"),
+    plan: path.join(OUTPUT_DIR, "rough_cut_plan.json"),
+    roughCut: path.join(OUTPUT_DIR, "rough_cut.mp4"),
+  };
+}
+
+function formatScriptLog(scriptName, result) {
+  const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+  return output ? `${scriptName}\n${output}` : `${scriptName}\n(no output)`;
+}
+
+async function runTimelineScript(scriptPath, options = {}) {
+  const scriptName = path.basename(scriptPath);
+  if (!fs.existsSync(scriptPath)) {
+    const error = new Error(`${scriptName} が見つかりません`);
+    error.logs = [`${scriptName}\nmissing: ${toProjectPath(scriptPath)}`];
+    throw error;
+  }
+  try {
+    return await execFileAsync(process.execPath, [scriptPath], {
+      cwd: PROJECT_ROOT,
+      windowsHide: true,
+      maxBuffer: 1024 * 1024 * 80,
+      env: {
+        ...process.env,
+        ...(options.env || {}),
+      },
+    });
+  } catch (error) {
+    const failed = new Error(`${scriptName} の実行に失敗しました`);
+    failed.logs = [
+      formatScriptLog(scriptName, {
+        stdout: error.stdout || "",
+        stderr: error.stderr || error.message || "",
+      }),
+    ];
+    throw failed;
+  }
+}
+
+async function timelineRenderState() {
+  const paths = timelineRenderPaths();
+  return {
+    inProgress: timelineRenderInProgress,
+    scripts: {
+      adapt_asset_manifest: fs.existsSync(paths.adaptScript),
+      build_timeline_roughcut: fs.existsSync(paths.buildScript),
+    },
+    outputExists: fs.existsSync(paths.roughCut),
+    outputUrl: fs.existsSync(paths.roughCut) ? `/media/output/rough_cut.mp4?v=${Date.now()}` : null,
+    manifestCheck: await readJsonIfExists(paths.manifestCheck),
+    plan: await readJsonIfExists(paths.plan),
+  };
+}
+
+async function runTimelineRender() {
+  const paths = timelineRenderPaths();
+  const logs = [];
+  await fsp.mkdir(OUTPUT_DIR, { recursive: true });
+
+  try {
+    const adaptResult = await runTimelineScript(paths.adaptScript);
+    logs.push(formatScriptLog("adapt_asset_manifest.js", adaptResult));
+
+    const buildResult = await runTimelineScript(paths.buildScript, {
+      env: { ASSET_MANIFEST_PATH: "output/asset_manifest_for_renderer.json" },
+    });
+    logs.push(formatScriptLog("build_timeline_roughcut.js", buildResult));
+  } catch (error) {
+    logs.push(...(error.logs || []));
+    const message = error.message || "音声タイムライン生成に失敗しました";
+    const details = logs.join("\n\n").trim();
+    const failed = new Error(details ? `${message}\n${details}` : message);
+    failed.logs = logs;
+    throw failed;
+  }
+
+  const manifestCheck = await readJsonIfExists(paths.manifestCheck);
+  const plan = await readJsonIfExists(paths.plan);
+  const outputExists = fs.existsSync(paths.roughCut);
+  return {
+    ok: Boolean(outputExists && manifestCheck?.ok !== false && plan?.ok !== false),
+    outputExists,
+    outputUrl: outputExists ? `/media/output/rough_cut.mp4?v=${Date.now()}` : null,
+    manifestCheck,
+    plan,
+    exportClips: await listExportClips(),
+    logs,
+  };
 }
 
 function sendJson(response, status, value) {
@@ -1616,6 +1316,28 @@ async function handleApi(request, response, url) {
     }
     return;
   }
+  if (url.pathname === "/api/timeline-render-state" && request.method === "GET") {
+    sendJson(response, 200, await timelineRenderState());
+    return;
+  }
+  if (url.pathname === "/api/timeline-render" && request.method === "POST") {
+    if (timelineRenderInProgress) {
+      sendJson(response, 409, { error: "音声タイムライン生成中です。完了までお待ちください" });
+      return;
+    }
+    timelineRenderInProgress = true;
+    try {
+      sendJson(response, 200, await runTimelineRender());
+    } catch (error) {
+      sendJson(response, 400, {
+        error: error.message || "音声タイムライン生成に失敗しました",
+        logs: error.logs || [],
+      });
+    } finally {
+      timelineRenderInProgress = false;
+    }
+    return;
+  }
   if (url.pathname === "/api/asset-catalog" && request.method === "GET") {
     sendJson(response, 200, await withInstallStatus(await fetchAssetCatalog()));
     return;
@@ -1630,11 +1352,8 @@ async function handleApi(request, response, url) {
     return;
   }
   if (url.pathname === "/api/state") {
-    const templates = await listTemplates();
     sendJson(response, 200, {
-      templates,
       assets: await assetSummary(),
-      timeline: await readTimeline(),
       outputExists: fs.existsSync(path.join(OUTPUT_DIR, "rough_cut.mp4")),
       exportClips: await listExportClips(),
     });
@@ -1644,51 +1363,8 @@ async function handleApi(request, response, url) {
     sendJson(response, 200, { clips: await listExportClips() });
     return;
   }
-  if (url.pathname === "/api/templates") {
-    sendJson(response, 200, { templates: await listTemplates() });
-    return;
-  }
   if (url.pathname === "/api/assets") {
     sendJson(response, 200, await assetSummary());
-    return;
-  }
-  if (url.pathname === "/api/timeline") {
-    sendJson(response, 200, { timeline: await readTimeline() });
-    return;
-  }
-  if (url.pathname === "/api/slot-selection" && request.method === "POST") {
-    const body = await readRequestBody(request);
-    const template = body.template || (await readTemplate(body.name));
-    sendJson(response, 200, await defaultSlotSelections(template));
-    return;
-  }
-  if (url.pathname === "/api/template" && request.method === "GET") {
-    sendJson(response, 200, {
-      name: url.searchParams.get("name") || "ai_prompt_30s.json",
-      template: await readTemplate(url.searchParams.get("name")),
-    });
-    return;
-  }
-  if (url.pathname === "/api/template" && request.method === "PUT") {
-    const body = await readRequestBody(request);
-    sendJson(response, 200, {
-      template: await saveTemplate(body.name, body.template),
-    });
-    return;
-  }
-  if (url.pathname === "/api/render" && request.method === "POST") {
-    if (renderInProgress) {
-      sendJson(response, 409, { error: "A render is already in progress." });
-      return;
-    }
-    renderInProgress = true;
-    try {
-      const body = await readRequestBody(request);
-      const template = body.template || (await readTemplate(body.name));
-      sendJson(response, 200, await buildRoughCut(template, body.assetSelections));
-    } finally {
-      renderInProgress = false;
-    }
     return;
   }
   sendJson(response, 404, { error: "Not found" });

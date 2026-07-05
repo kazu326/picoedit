@@ -1,13 +1,9 @@
 const state = {
-  templates: [],
-  templateName: "ai_prompt_30s.json",
-  template: null,
   assets: null,
-  timeline: null,
   outputExists: false,
   exportClips: [],
   voice: null,
-  slotSelections: {},
+  timelineRenderState: null,
   assetCatalog: null,
   installingPackId: null,
   exportDirectoryHandle: null,
@@ -16,18 +12,10 @@ const state = {
 
 const elements = {
   projectStatus: document.querySelector("#projectStatus"),
-  templateSelect: document.querySelector("#templateSelect"),
-  importJsonButton: document.querySelector("#importJsonButton"),
-  jsonFileInput: document.querySelector("#jsonFileInput"),
   reloadButton: document.querySelector("#reloadButton"),
-  saveButton: document.querySelector("#saveButton"),
-  renderButton: document.querySelector("#renderButton"),
+  timelineRenderButton: document.querySelector("#timelineRenderButton"),
   exportFolderButton: document.querySelector("#exportFolderButton"),
   exportButton: document.querySelector("#exportButton"),
-  templateId: document.querySelector("#templateId"),
-  outputSize: document.querySelector("#outputSize"),
-  fps: document.querySelector("#fps"),
-  slotRows: document.querySelector("#slotRows"),
   previewVideo: document.querySelector("#previewVideo"),
   emptyPreview: document.querySelector("#emptyPreview"),
   outputMeta: document.querySelector("#outputMeta"),
@@ -65,51 +53,11 @@ async function api(path, options = {}) {
   });
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.error || `Request failed: ${response.status}`);
+    const error = new Error(data.error || `Request failed: ${response.status}`);
+    error.logs = data.logs || [];
+    throw error;
   }
   return data;
-}
-
-function folderOptions(selectedFolder) {
-  const folders = state.assets?.folders || [];
-  return folders
-    .map(({ folder, count }) => {
-      const selected = folder === selectedFolder ? "selected" : "";
-      return `<option value="${escapeHtml(folder)}" ${selected}>${escapeHtml(folder)} (${count})</option>`;
-    })
-    .join("");
-}
-
-function allAssets() {
-  return (state.assets?.folders || []).flatMap((group) => group.files || []);
-}
-
-function findAsset(assetPath) {
-  return allAssets().find((asset) => asset.path === assetPath) || null;
-}
-
-function assetsForFolder(folder) {
-  return allAssets().filter((asset) => asset.folder === folder);
-}
-
-function assetOptions(selectedPath, folder) {
-  const folderAssets = assetsForFolder(folder);
-  const selectedAsset = findAsset(selectedPath);
-  const candidates =
-    selectedAsset && !folderAssets.some((asset) => asset.path === selectedAsset.path)
-      ? [selectedAsset, ...folderAssets]
-      : folderAssets;
-
-  return candidates
-    .map((asset) => {
-      const selected = asset.path === selectedPath ? "selected" : "";
-      return `<option value="${escapeHtml(asset.path)}" ${selected}>${escapeHtml(asset.name)}</option>`;
-    })
-    .join("");
-}
-
-function fileNameFromPath(assetPath) {
-  return String(assetPath || "").split("/").pop() || "-";
 }
 
 function escapeHtml(value) {
@@ -120,127 +68,17 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
-function readTemplateFromForm() {
-  const rows = [...elements.slotRows.querySelectorAll("tr")];
-  return {
-    template_id: elements.templateId.value.trim(),
-    output_size: elements.outputSize.value.trim(),
-    fps: Number(elements.fps.value),
-    slots: rows.map((row) => ({
-      slot_id: row.dataset.slotId,
-      label: row.querySelector("[data-field='label']").value,
-      folder: row.querySelector("[data-field='folder']").value,
-      target_duration: Number(row.querySelector("[data-field='target_duration']").value),
-    })),
-  };
-}
-
-function readAssetSelectionsFromForm() {
-  const selections = {};
-  for (const row of elements.slotRows.querySelectorAll("tr")) {
-    const assetPath = row.querySelector("[data-field='asset']")?.value;
-    if (assetPath) {
-      selections[row.dataset.slotId] = assetPath;
-    }
-  }
-  return selections;
-}
-
-function updateSlotSelectionView(row, assetPath) {
-  const asset = findAsset(assetPath);
-  const video = row.querySelector("[data-role='slot-preview']");
-  const name = row.querySelector("[data-role='asset-name']");
-  const path = row.querySelector("[data-role='asset-path']");
-
-  name.textContent = asset?.name || fileNameFromPath(assetPath);
-  path.textContent = assetPath || "-";
-  if (assetPath) {
-    video.src = `/media/${assetPath}`;
-    video.load();
-  } else {
-    video.removeAttribute("src");
-  }
-}
-
-function setRowAsset(row, slotId, assetPath) {
-  const picker = row.querySelector("[data-field='asset']");
-  state.slotSelections[slotId] = assetPath;
-  picker.value = assetPath;
-  updateSlotSelectionView(row, assetPath);
-}
-
-function renderTemplate() {
-  const template = state.template;
-  elements.templateId.value = template?.template_id || "";
-  elements.outputSize.value = template?.output_size || "";
-  elements.fps.value = template?.fps || 30;
-  elements.slotRows.innerHTML = "";
-
-  for (const slot of template?.slots || []) {
-    const selectedAsset = state.slotSelections[slot.slot_id] || "";
-    const row = document.createElement("tr");
-    row.dataset.slotId = slot.slot_id;
-    row.innerHTML = `
-      <td class="slot-id" data-label="slot">${escapeHtml(slot.slot_id)}</td>
-      <td data-label="label"><input data-field="label" type="text" value="${escapeHtml(slot.label)}"></td>
-      <td data-label="folder"><select data-field="folder">${folderOptions(slot.folder)}</select></td>
-      <td data-label="sec"><input data-field="target_duration" type="number" min="0.1" step="0.1" value="${slot.target_duration}"></td>
-      <td class="asset-cell" data-label="selected asset">
-        <strong data-role="asset-name">${escapeHtml(fileNameFromPath(selectedAsset))}</strong>
-        <p data-role="asset-path">${escapeHtml(selectedAsset || "-")}</p>
-      </td>
-      <td data-label="preview">
-        <video class="slot-preview-video" data-role="slot-preview" muted controls preload="metadata"></video>
-      </td>
-      <td class="asset-actions" data-label="change">
-        <button type="button" data-action="change-asset">素材を変更</button>
-        <select class="asset-picker" data-field="asset" hidden>${assetOptions(selectedAsset, slot.folder)}</select>
-      </td>
-    `;
-    elements.slotRows.appendChild(row);
-    const folderSelect = row.querySelector("[data-field='folder']");
-    const picker = row.querySelector("[data-field='asset']");
-    const changeButton = row.querySelector("[data-action='change-asset']");
-    picker.addEventListener("change", () => {
-      setRowAsset(row, slot.slot_id, picker.value);
-      log(`${slot.slot_id} asset changed to ${fileNameFromPath(picker.value)}`);
-    });
-    folderSelect.addEventListener("change", () => {
-      const folderAssets = assetsForFolder(folderSelect.value);
-      picker.innerHTML = assetOptions(folderAssets[0]?.path || "", folderSelect.value);
-      if (folderAssets[0]) {
-        setRowAsset(row, slot.slot_id, folderAssets[0].path);
-        log(`${slot.slot_id} folder changed to ${folderSelect.value}`);
-      } else {
-        setRowAsset(row, slot.slot_id, "");
-        log(`${slot.slot_id} folder has no video assets`, "warn");
-      }
-    });
-    changeButton.addEventListener("click", () => {
-      picker.hidden = !picker.hidden;
-      if (!picker.hidden) {
-        picker.focus();
-      }
-    });
-    updateSlotSelectionView(row, selectedAsset);
-  }
-}
-
-function renderTemplates() {
-  elements.templateSelect.innerHTML = state.templates
-    .map((name) => {
-      const selected = name === state.templateName ? "selected" : "";
-      return `<option value="${escapeHtml(name)}" ${selected}>${escapeHtml(name)}</option>`;
-    })
-    .join("");
+function fileNameFromPath(assetPath) {
+  return String(assetPath || "").split("/").pop() || "-";
 }
 
 function renderPreview(outputUrl) {
   const frame = elements.previewVideo.closest(".preview-frame");
   if (outputUrl || state.outputExists) {
-    elements.previewVideo.src = outputUrl || `/media/output/rough_cut.mp4?v=${Date.now()}`;
+    const url = outputUrl || `/media/output/rough_cut.mp4?v=${Date.now()}`;
+    elements.previewVideo.src = url;
     frame.classList.add("has-video");
-    elements.singleVideoButton.href = outputUrl || `/media/output/rough_cut.mp4?v=${Date.now()}`;
+    elements.singleVideoButton.href = url;
     elements.singleVideoButton.setAttribute("aria-disabled", "false");
     elements.singleVideoButton.tabIndex = 0;
   } else {
@@ -284,27 +122,48 @@ function renderVoice() {
 }
 
 function renderTimeline() {
-  const segments = state.timeline?.segments || [];
-  const total = segments.length ? segments[segments.length - 1].end : 0;
-  elements.timelineMeta.textContent = segments.length ? `${segments.length} slots / ${total.toFixed(1)}s` : "-";
-  elements.outputMeta.textContent = state.outputExists ? `${total.toFixed(1)}s / 1080x1920` : "-";
+  const timelineRender = state.timelineRenderState || {};
+  const plan = timelineRender.plan || {};
+  const check = timelineRender.manifestCheck || {};
+  const assignments = Array.isArray(plan.assignments) ? plan.assignments : [];
+  elements.timelineMeta.textContent = assignments.length
+    ? `${assignments.length} segments / ${Number(plan.rough_cut_duration || 0).toFixed(2)}s`
+    : "-";
+  elements.outputMeta.textContent = timelineRender.outputExists
+    ? `${Number(plan.rough_cut_duration || 0).toFixed(2)}s / 1080x1920`
+    : "-";
   elements.timelineRows.innerHTML = "";
 
-  if (!segments.length) {
-    elements.timelineRows.innerHTML = `<div class="timeline-row"><p>output/timeline.json</p></div>`;
+  if (!assignments.length) {
+    elements.timelineRows.innerHTML = `<div class="timeline-row"><p>output/timeline_with_captions.json を基準に生成します。</p></div>`;
     return;
   }
 
-  for (const segment of segments) {
+  const roles = check.roles || {};
+  const summary = document.createElement("article");
+  summary.className = "timeline-row timeline-summary";
+  summary.innerHTML = `
+    <header>
+      <span>音声タイムライン生成</span>
+      <span>${escapeHtml(String(plan.ok ? "OK" : "確認中"))}</span>
+    </header>
+    <p>素材 ${Number(check.video_count || plan.recognized_video_count || 0)}本</p>
+    <p>hook ${Number(roles.hook || 0)} / problem ${Number(roles.problem || 0)} / explain ${Number(roles.explain || 0)} / proof ${Number(roles.proof || 0)} / cta ${Number(roles.cta || 0)}</p>
+    <p>missing ${Number(check.missing_count || 0)}</p>
+  `;
+  elements.timelineRows.appendChild(summary);
+
+  for (const assignment of assignments) {
     const row = document.createElement("article");
     row.className = "timeline-row";
     row.innerHTML = `
       <header>
-        <span>${escapeHtml(segment.slot_id)} / ${escapeHtml(segment.label)}</span>
-        <span>${segment.start.toFixed(1)}-${segment.end.toFixed(1)}s</span>
+        <span>${escapeHtml(assignment.segment_id)} / ${escapeHtml(assignment.role)}</span>
+        <span>${Number(assignment.start).toFixed(2)}-${Number(assignment.end).toFixed(2)}s</span>
       </header>
-      <p>${escapeHtml(segment.asset)}</p>
-      <p>speed ${Number(segment.speed).toFixed(3)}x</p>
+      <p>素材: ${escapeHtml(fileNameFromPath(assignment.asset_path))}</p>
+      <p>${escapeHtml(assignment.asset_path)}</p>
+      <p>処理: ${escapeHtml(assignment.render_mode)} / ${Number(assignment.duration_sec).toFixed(2)}s</p>
     `;
     elements.timelineRows.appendChild(row);
   }
@@ -318,9 +177,7 @@ function renderAssets() {
   for (const group of folders) {
     const node = document.createElement("article");
     node.className = "asset-folder";
-    const files = group.files
-      .map((file) => `<li>${escapeHtml(file.name)}</li>`)
-      .join("");
+    const files = group.files.map((file) => `<li>${escapeHtml(file.name)}</li>`).join("");
     node.innerHTML = `
       <header>
         <span>${escapeHtml(group.folder)}</span>
@@ -365,53 +222,22 @@ function renderAssetPacks() {
 }
 
 function renderAll() {
-  renderTemplates();
-  renderTemplate();
   renderVoice();
   renderTimeline();
   renderAssets();
   renderAssetPacks();
   renderPreview();
-  elements.projectStatus.textContent = `${state.templateName} / ${state.assets?.count || 0} assets`;
-}
-
-async function loadTemplate(name = state.templateName) {
-  const data = await api(`/api/template?name=${encodeURIComponent(name)}`);
-  state.templateName = data.name;
-  state.template = data.template;
-}
-
-async function loadSlotSelections() {
-  if (!state.template) {
-    state.slotSelections = {};
-    return;
-  }
-  const data = await api("/api/slot-selection", {
-    method: "POST",
-    body: JSON.stringify({ template: state.template }),
-  });
-  state.slotSelections = Object.fromEntries(
-    (data.selections || []).map((selection) => [selection.slot_id, selection.asset])
-  );
-  for (const warning of data.warnings || []) {
-    log(warning, "warn");
-  }
+  elements.projectStatus.textContent = `${state.assets?.count || 0} assets`;
 }
 
 async function loadState() {
   const data = await api("/api/state");
-  state.templates = data.templates;
   state.assets = data.assets;
-  state.timeline = data.timeline;
   state.outputExists = data.outputExists;
   state.exportClips = data.exportClips || [];
   state.voice = await api("/api/voice/status");
+  state.timelineRenderState = await api("/api/timeline-render-state");
   state.assetCatalog = await api("/api/asset-catalog");
-  if (!state.templates.includes(state.templateName)) {
-    state.templateName = state.templates[0] || state.templateName;
-  }
-  await loadTemplate(state.templateName);
-  await loadSlotSelections();
   renderAll();
   log("loaded project state");
 }
@@ -428,7 +254,6 @@ async function installAssetPack(packId) {
     log(result.message);
     const stateData = await api("/api/state");
     state.assets = stateData.assets;
-    state.timeline = stateData.timeline;
     state.outputExists = stateData.outputExists;
     state.exportClips = stateData.exportClips || [];
     state.assetCatalog = await api("/api/asset-catalog");
@@ -439,39 +264,6 @@ async function installAssetPack(packId) {
     state.installingPackId = null;
     renderAssetPacks();
   }
-}
-
-function validateImportedTemplate(template) {
-  if (!template || typeof template !== "object" || Array.isArray(template)) {
-    throw new Error("JSONの形式が正しくありません。テンプレートJSONを選んでください。");
-  }
-  for (const key of ["template_id", "output_size", "fps", "slots"]) {
-    if (!(key in template)) {
-      throw new Error(`JSONに ${key} がありません。テンプレートJSONを選んでください。`);
-    }
-  }
-  if (!Array.isArray(template.slots) || template.slots.length === 0) {
-    throw new Error("JSONにスロットがありません。テンプレートJSONを選んでください。");
-  }
-}
-
-async function importTemplateJson(file) {
-  const text = await file.text();
-  let template;
-  try {
-    template = JSON.parse(text);
-  } catch {
-    throw new Error("JSONを読み込めません。ファイルの形式を確認してください。");
-  }
-  validateImportedTemplate(template);
-  state.templateName = file.name.toLowerCase().endsWith(".json") ? file.name : `${file.name}.json`;
-  state.template = template;
-  if (!state.templates.includes(state.templateName)) {
-    state.templates = [state.templateName, ...state.templates];
-  }
-  await loadSlotSelections();
-  renderAll();
-  log(`JSONを読み込みました: ${state.templateName}`);
 }
 
 async function chooseExportFolder() {
@@ -486,14 +278,10 @@ async function chooseExportFolder() {
 }
 
 async function ensureExportFolderPermission(handle) {
-  if (!handle) {
-    return;
-  }
+  if (!handle) return;
   if (typeof handle.queryPermission === "function") {
     const current = await handle.queryPermission({ mode: "readwrite" });
-    if (current === "granted") {
-      return;
-    }
+    if (current === "granted") return;
   }
   if (typeof handle.requestPermission === "function") {
     const requested = await handle.requestPermission({ mode: "readwrite" });
@@ -571,9 +359,6 @@ async function mergeTimestamps() {
       method: "POST",
       body: JSON.stringify({}),
     });
-    const timelineData = await api("/api/timeline");
-    state.timeline = timelineData.timeline;
-    renderTimeline();
     elements.voiceMeta.textContent = `${result.script_path} / ${result.timeline_path}`;
     log(`${result.message}: ${result.segment_count} segments`);
   } catch (error) {
@@ -585,38 +370,35 @@ async function mergeTimestamps() {
   }
 }
 
-async function saveTemplate() {
-  const template = readTemplateFromForm();
-  const data = await api("/api/template", {
-    method: "PUT",
-    body: JSON.stringify({ name: state.templateName, template }),
-  });
-  state.template = data.template;
-  await loadSlotSelections();
-  renderTemplate();
-  log(`saved ${state.templateName}`);
-}
-
-async function renderRoughCut() {
-  const template = readTemplateFromForm();
-  const assetSelections = readAssetSelectionsFromForm();
+async function renderTimelineRoughCut() {
   setBusy(true);
-  log("render started");
+  log("音声タイムライン生成を開始");
+  log("素材台帳を変換");
   try {
-    const data = await api("/api/render", {
+    const data = await api("/api/timeline-render", {
       method: "POST",
-      body: JSON.stringify({ template, assetSelections }),
+      body: JSON.stringify({}),
     });
-    state.timeline = data.timeline;
-    state.outputExists = true;
+    state.timelineRenderState = {
+      inProgress: false,
+      scripts: { adapt_asset_manifest: true, build_timeline_roughcut: true },
+      outputExists: data.outputExists,
+      outputUrl: data.outputUrl,
+      manifestCheck: data.manifestCheck,
+      plan: data.plan,
+    };
+    state.outputExists = data.outputExists;
     state.exportClips = data.exportClips || [];
-    for (const warning of data.warnings || []) {
-      log(warning, "warn");
-    }
+    log(`${data.manifestCheck?.video_count || data.plan?.recognized_video_count || 0}素材を認識`);
+    log(`${data.plan?.segment_count || 0} segmentsへ素材を割当`);
+    log("rough_cut.mp4を生成");
     renderTimeline();
     renderPreview(data.outputUrl);
-    log("render finished");
+    log("完了");
   } catch (error) {
+    for (const scriptLog of error.logs || []) {
+      log(scriptLog, "error");
+    }
     log(error.message, "error");
   } finally {
     setBusy(false);
@@ -624,28 +406,22 @@ async function renderRoughCut() {
 }
 
 function setBusy(isBusy) {
-  elements.renderButton.disabled = isBusy;
-  elements.saveButton.disabled = isBusy;
+  elements.timelineRenderButton.disabled = isBusy;
   elements.reloadButton.disabled = isBusy;
-  elements.importJsonButton.disabled = isBusy;
   elements.voiceGenerateButton.disabled = isBusy;
   elements.mergeTimestampsButton.disabled = isBusy;
   elements.exportFolderButton.disabled = isBusy;
   elements.exportButton.disabled = isBusy || !state.exportClips?.length;
-  elements.renderButton.textContent = isBusy ? "生成中" : "生成";
+  elements.timelineRenderButton.textContent = isBusy ? "生成中" : "音声タイムライン生成";
   elements.exportButton.textContent = isBusy ? "書き出し" : (state.exportClips?.length ? `書き出し (${state.exportClips.length})` : "書き出し");
-  elements.projectStatus.textContent = isBusy ? "生成中" : `${state.templateName} / ${state.assets?.count || 0} assets`;
+  elements.projectStatus.textContent = isBusy ? "生成中" : `${state.assets?.count || 0} assets`;
 }
 
 elements.reloadButton.addEventListener("click", () => {
   loadState().catch((error) => log(error.message, "error"));
 });
 
-elements.saveButton.addEventListener("click", () => {
-  saveTemplate().catch((error) => log(error.message, "error"));
-});
-
-elements.renderButton.addEventListener("click", renderRoughCut);
+elements.timelineRenderButton.addEventListener("click", renderTimelineRoughCut);
 
 elements.voiceGenerateButton.addEventListener("click", () => {
   generateVoice().catch((error) => log(error.message, "error"));
@@ -659,23 +435,6 @@ elements.exportFolderButton.addEventListener("click", () => {
   chooseExportFolder().catch((error) => log(error.message, "error"));
 });
 
-elements.importJsonButton.addEventListener("click", () => {
-  elements.jsonFileInput.click();
-});
-
-elements.jsonFileInput.addEventListener("change", async (event) => {
-  const file = event.target.files?.[0];
-  event.target.value = "";
-  if (!file) {
-    return;
-  }
-  try {
-    await importTemplateJson(file);
-  } catch (error) {
-    log(error.message, "error");
-  }
-});
-
 elements.exportButton.addEventListener("click", () => {
   exportSelectedClips().catch((error) => log(error.message, "error"));
 });
@@ -686,14 +445,6 @@ elements.packList.addEventListener("click", (event) => {
     return;
   }
   installAssetPack(button.dataset.packId).catch((error) => log(error.message, "error"));
-});
-
-elements.templateSelect.addEventListener("change", async (event) => {
-  state.templateName = event.target.value;
-  await loadTemplate(state.templateName);
-  await loadSlotSelections();
-  renderAll();
-  log(`selected ${state.templateName}`);
 });
 
 elements.clearLogButton.addEventListener("click", () => {

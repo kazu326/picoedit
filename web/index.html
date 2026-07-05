@@ -19,12 +19,8 @@
           <p id="projectStatus">読み込み中</p>
         </div>
         <div class="toolbar">
-          <select id="templateSelect" aria-label="テンプレート"></select>
-          <button id="importJsonButton" type="button" title="JSON読み込み">JSON読込</button>
-          <input id="jsonFileInput" type="file" accept="application/json,.json" hidden>
           <button id="reloadButton" type="button" title="再読込">再読込</button>
-          <button id="saveButton" type="button" title="テンプレート保存">保存</button>
-          <button id="renderButton" class="primary" type="button" title="ラフカット生成">生成</button>
+          <button id="timelineRenderButton" class="primary" type="button" title="timeline_with_captions.json と音声実時間を基準に生成">音声タイムライン生成</button>
           <button id="exportFolderButton" type="button" title="書き出し先フォルダ選択">書き出し先</button>
           <button id="exportButton" type="button" title="編集済み分割素材を書き出し" disabled>書き出し</button>
         </div>
@@ -42,42 +38,6 @@
           <div class="preview-frame">
             <video id="previewVideo" controls playsinline preload="metadata"></video>
             <div id="emptyPreview" class="empty-preview">output/rough_cut.mp4</div>
-          </div>
-        </section>
-
-        <section class="panel template-panel">
-          <div class="panel-head">
-            <h2>テンプレート</h2>
-            <div class="template-fields">
-              <label>
-                ID
-                <input id="templateId" type="text">
-              </label>
-              <label>
-                サイズ
-                <input id="outputSize" type="text">
-              </label>
-              <label>
-                FPS
-                <input id="fps" type="number" min="1" step="1">
-              </label>
-            </div>
-          </div>
-          <div class="slot-table-wrap">
-            <table class="slot-table">
-              <thead>
-                <tr>
-                  <th>slot</th>
-                  <th>label</th>
-                  <th>folder</th>
-                  <th>sec</th>
-                  <th>selected asset</th>
-                  <th>preview</th>
-                  <th>change</th>
-                </tr>
-              </thead>
-              <tbody id="slotRows"></tbody>
-            </table>
           </div>
         </section>
 
