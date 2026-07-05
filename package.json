@@ -6,6 +6,9 @@
   "scripts": {
     "start": "node server.js"
   },
+  "dependencies": {
+    "@elevenlabs/elevenlabs-js": "^2.56.0"
+  },
   "engines": {
     "node": ">=20"
   }

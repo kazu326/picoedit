@@ -19,7 +19,18 @@ if errorlevel 1 (
   exit /b 1
 )
 
-start "" "http://127.0.0.1:8765/"
-npm start
+set "PICOEDIT_URL=http://127.0.0.1:8765/"
 
+echo Starting PicoEdit...
+start "PicoEdit Server" /min node server.js
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\wait-health.ps1" "%PICOEDIT_URL%api/health" 20 >nul 2>nul
+if not errorlevel 1 (
+  start "" "%PICOEDIT_URL%"
+  echo PicoEdit is ready.
+  exit /b 0
+)
+
+echo PicoEdit could not start.
+echo Close any old PicoEdit server window, then run this file again.
 pause

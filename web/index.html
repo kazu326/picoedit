@@ -20,9 +20,13 @@
         </div>
         <div class="toolbar">
           <select id="templateSelect" aria-label="テンプレート"></select>
+          <button id="importJsonButton" type="button" title="JSON読み込み">JSON読込</button>
+          <input id="jsonFileInput" type="file" accept="application/json,.json" hidden>
           <button id="reloadButton" type="button" title="再読込">再読込</button>
           <button id="saveButton" type="button" title="テンプレート保存">保存</button>
           <button id="renderButton" class="primary" type="button" title="ラフカット生成">生成</button>
+          <button id="exportFolderButton" type="button" title="書き出し先フォルダ選択">書き出し先</button>
+          <button id="exportButton" type="button" title="編集済み分割素材を書き出し" disabled>書き出し</button>
         </div>
       </header>
 
@@ -30,7 +34,10 @@
         <section class="panel preview-panel">
           <div class="panel-head">
             <h2>プレビュー</h2>
-            <span id="outputMeta">-</span>
+            <div class="panel-head-actions">
+              <span id="outputMeta">-</span>
+              <a id="singleVideoButton" class="button-link compact" href="/media/output/rough_cut.mp4" download="rough_cut.mp4" aria-disabled="true">1本動画を保存</a>
+            </div>
           </div>
           <div class="preview-frame">
             <video id="previewVideo" controls playsinline preload="metadata"></video>
@@ -74,6 +81,22 @@
           </div>
         </section>
 
+        <section class="panel voice-panel">
+          <div class="panel-head">
+            <h2>音声生成</h2>
+            <span id="voiceStatus">確認中</span>
+          </div>
+          <div class="voice-body">
+            <textarea id="voiceText" rows="5" placeholder="音声にする文章を入力"></textarea>
+            <div class="voice-actions">
+              <button id="voiceGenerateButton" type="button">音声生成</button>
+              <button id="mergeTimestampsButton" type="button">timestamps結合</button>
+              <span id="voiceMeta">-</span>
+            </div>
+            <audio id="voiceAudio" controls hidden></audio>
+          </div>
+        </section>
+
         <section class="panel timeline-panel">
           <div class="panel-head">
             <h2>タイムライン</h2>
@@ -88,6 +111,14 @@
             <span id="assetMeta">-</span>
           </div>
           <div id="assetFolders" class="asset-folders"></div>
+        </section>
+
+        <section class="panel packs-panel">
+          <div class="panel-head">
+            <h2>素材パック</h2>
+            <span id="packMeta">読み込み中</span>
+          </div>
+          <div id="packList" class="pack-list"></div>
         </section>
 
         <section class="panel log-panel">

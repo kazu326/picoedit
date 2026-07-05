@@ -5,15 +5,25 @@ const state = {
   assets: null,
   timeline: null,
   outputExists: false,
+  exportClips: [],
+  voice: null,
   slotSelections: {},
+  assetCatalog: null,
+  installingPackId: null,
+  exportDirectoryHandle: null,
+  exportDirectoryName: "",
 };
 
 const elements = {
   projectStatus: document.querySelector("#projectStatus"),
   templateSelect: document.querySelector("#templateSelect"),
+  importJsonButton: document.querySelector("#importJsonButton"),
+  jsonFileInput: document.querySelector("#jsonFileInput"),
   reloadButton: document.querySelector("#reloadButton"),
   saveButton: document.querySelector("#saveButton"),
   renderButton: document.querySelector("#renderButton"),
+  exportFolderButton: document.querySelector("#exportFolderButton"),
+  exportButton: document.querySelector("#exportButton"),
   templateId: document.querySelector("#templateId"),
   outputSize: document.querySelector("#outputSize"),
   fps: document.querySelector("#fps"),
@@ -21,10 +31,19 @@ const elements = {
   previewVideo: document.querySelector("#previewVideo"),
   emptyPreview: document.querySelector("#emptyPreview"),
   outputMeta: document.querySelector("#outputMeta"),
+  singleVideoButton: document.querySelector("#singleVideoButton"),
+  voiceStatus: document.querySelector("#voiceStatus"),
+  voiceText: document.querySelector("#voiceText"),
+  voiceGenerateButton: document.querySelector("#voiceGenerateButton"),
+  mergeTimestampsButton: document.querySelector("#mergeTimestampsButton"),
+  voiceMeta: document.querySelector("#voiceMeta"),
+  voiceAudio: document.querySelector("#voiceAudio"),
   timelineMeta: document.querySelector("#timelineMeta"),
   timelineRows: document.querySelector("#timelineRows"),
   assetMeta: document.querySelector("#assetMeta"),
   assetFolders: document.querySelector("#assetFolders"),
+  packMeta: document.querySelector("#packMeta"),
+  packList: document.querySelector("#packList"),
   logOutput: document.querySelector("#logOutput"),
   clearLogButton: document.querySelector("#clearLogButton"),
 };
@@ -162,18 +181,18 @@ function renderTemplate() {
     const row = document.createElement("tr");
     row.dataset.slotId = slot.slot_id;
     row.innerHTML = `
-      <td class="slot-id">${escapeHtml(slot.slot_id)}</td>
-      <td><input data-field="label" type="text" value="${escapeHtml(slot.label)}"></td>
-      <td><select data-field="folder">${folderOptions(slot.folder)}</select></td>
-      <td><input data-field="target_duration" type="number" min="0.1" step="0.1" value="${slot.target_duration}"></td>
-      <td class="asset-cell">
+      <td class="slot-id" data-label="slot">${escapeHtml(slot.slot_id)}</td>
+      <td data-label="label"><input data-field="label" type="text" value="${escapeHtml(slot.label)}"></td>
+      <td data-label="folder"><select data-field="folder">${folderOptions(slot.folder)}</select></td>
+      <td data-label="sec"><input data-field="target_duration" type="number" min="0.1" step="0.1" value="${slot.target_duration}"></td>
+      <td class="asset-cell" data-label="selected asset">
         <strong data-role="asset-name">${escapeHtml(fileNameFromPath(selectedAsset))}</strong>
         <p data-role="asset-path">${escapeHtml(selectedAsset || "-")}</p>
       </td>
-      <td>
+      <td data-label="preview">
         <video class="slot-preview-video" data-role="slot-preview" muted controls preload="metadata"></video>
       </td>
-      <td class="asset-actions">
+      <td class="asset-actions" data-label="change">
         <button type="button" data-action="change-asset">素材を変更</button>
         <select class="asset-picker" data-field="asset" hidden>${assetOptions(selectedAsset, slot.folder)}</select>
       </td>
@@ -221,9 +240,46 @@ function renderPreview(outputUrl) {
   if (outputUrl || state.outputExists) {
     elements.previewVideo.src = outputUrl || `/media/output/rough_cut.mp4?v=${Date.now()}`;
     frame.classList.add("has-video");
+    elements.singleVideoButton.href = outputUrl || `/media/output/rough_cut.mp4?v=${Date.now()}`;
+    elements.singleVideoButton.setAttribute("aria-disabled", "false");
+    elements.singleVideoButton.tabIndex = 0;
   } else {
     elements.previewVideo.removeAttribute("src");
     frame.classList.remove("has-video");
+    elements.singleVideoButton.href = "/media/output/rough_cut.mp4";
+    elements.singleVideoButton.setAttribute("aria-disabled", "true");
+    elements.singleVideoButton.tabIndex = -1;
+  }
+  renderExportControls();
+}
+
+function renderExportControls() {
+  const clipCount = state.exportClips?.length || 0;
+  elements.exportButton.disabled = clipCount === 0;
+  elements.exportButton.textContent = clipCount ? `書き出し (${clipCount})` : "書き出し";
+  elements.exportFolderButton.textContent = state.exportDirectoryName
+    ? `書き出し先: ${state.exportDirectoryName}`
+    : "書き出し先";
+}
+
+function renderVoice() {
+  const voice = state.voice || {};
+  if (!voice.api_key_configured) {
+    elements.voiceStatus.textContent = "APIキー未設定";
+  } else if (!voice.voice_id_configured) {
+    elements.voiceStatus.textContent = "Voice ID未設定";
+  } else {
+    elements.voiceStatus.textContent = "設定済み";
+  }
+
+  if (voice.audio_url) {
+    elements.voiceAudio.src = voice.audio_url;
+    elements.voiceAudio.hidden = false;
+    elements.voiceMeta.textContent = `${voice.audio_path} / ${voice.timestamps_path}`;
+  } else {
+    elements.voiceAudio.removeAttribute("src");
+    elements.voiceAudio.hidden = true;
+    elements.voiceMeta.textContent = voice.configured ? "音声はまだありません" : "ElevenLabs APIキーを設定してください";
   }
 }
 
@@ -276,11 +332,45 @@ function renderAssets() {
   }
 }
 
+function renderAssetPacks() {
+  const packs = state.assetCatalog?.packs || [];
+  elements.packMeta.textContent = packs.length ? `${packs.length} packs` : "0 packs";
+  elements.packList.innerHTML = "";
+
+  if (!packs.length) {
+    elements.packList.innerHTML = `<article class="pack-card"><p>利用可能な素材パックはありません。</p></article>`;
+    return;
+  }
+
+  for (const pack of packs) {
+    const card = document.createElement("article");
+    card.className = "pack-card";
+    const isInstalling = state.installingPackId === pack.id;
+    const installed = Boolean(pack.installed);
+    card.innerHTML = `
+      <div>
+        <header>
+          <strong>${escapeHtml(pack.name || pack.id)}</strong>
+          <span>v${escapeHtml(pack.version || "-")}</span>
+        </header>
+        <p>${escapeHtml(pack.description || "")}</p>
+        <small>${installed ? "導入済み" : "未導入"}</small>
+      </div>
+      <button type="button" data-action="install-pack" data-pack-id="${escapeHtml(pack.id)}" ${installed || isInstalling ? "disabled" : ""}>
+        ${installed ? "導入済み" : isInstalling ? "導入中" : "インストール"}
+      </button>
+    `;
+    elements.packList.appendChild(card);
+  }
+}
+
 function renderAll() {
   renderTemplates();
   renderTemplate();
+  renderVoice();
   renderTimeline();
   renderAssets();
+  renderAssetPacks();
   renderPreview();
   elements.projectStatus.textContent = `${state.templateName} / ${state.assets?.count || 0} assets`;
 }
@@ -314,6 +404,9 @@ async function loadState() {
   state.assets = data.assets;
   state.timeline = data.timeline;
   state.outputExists = data.outputExists;
+  state.exportClips = data.exportClips || [];
+  state.voice = await api("/api/voice/status");
+  state.assetCatalog = await api("/api/asset-catalog");
   if (!state.templates.includes(state.templateName)) {
     state.templateName = state.templates[0] || state.templateName;
   }
@@ -321,6 +414,175 @@ async function loadState() {
   await loadSlotSelections();
   renderAll();
   log("loaded project state");
+}
+
+async function installAssetPack(packId) {
+  state.installingPackId = packId;
+  renderAssetPacks();
+  log(`asset pack install started: ${packId}`);
+  try {
+    const result = await api("/api/assets/install", {
+      method: "POST",
+      body: JSON.stringify({ pack_id: packId }),
+    });
+    log(result.message);
+    const stateData = await api("/api/state");
+    state.assets = stateData.assets;
+    state.timeline = stateData.timeline;
+    state.outputExists = stateData.outputExists;
+    state.exportClips = stateData.exportClips || [];
+    state.assetCatalog = await api("/api/asset-catalog");
+    renderAll();
+  } catch (error) {
+    log(`${error.message} 次の一手: ネット接続を確認し、もう一度インストールしてください。`, "error");
+  } finally {
+    state.installingPackId = null;
+    renderAssetPacks();
+  }
+}
+
+function validateImportedTemplate(template) {
+  if (!template || typeof template !== "object" || Array.isArray(template)) {
+    throw new Error("JSONの形式が正しくありません。テンプレートJSONを選んでください。");
+  }
+  for (const key of ["template_id", "output_size", "fps", "slots"]) {
+    if (!(key in template)) {
+      throw new Error(`JSONに ${key} がありません。テンプレートJSONを選んでください。`);
+    }
+  }
+  if (!Array.isArray(template.slots) || template.slots.length === 0) {
+    throw new Error("JSONにスロットがありません。テンプレートJSONを選んでください。");
+  }
+}
+
+async function importTemplateJson(file) {
+  const text = await file.text();
+  let template;
+  try {
+    template = JSON.parse(text);
+  } catch {
+    throw new Error("JSONを読み込めません。ファイルの形式を確認してください。");
+  }
+  validateImportedTemplate(template);
+  state.templateName = file.name.toLowerCase().endsWith(".json") ? file.name : `${file.name}.json`;
+  state.template = template;
+  if (!state.templates.includes(state.templateName)) {
+    state.templates = [state.templateName, ...state.templates];
+  }
+  await loadSlotSelections();
+  renderAll();
+  log(`JSONを読み込みました: ${state.templateName}`);
+}
+
+async function chooseExportFolder() {
+  if (!window.showDirectoryPicker) {
+    throw new Error("このブラウザでは書き出し先フォルダを選択できません。ChromeまたはEdgeで開いてください。");
+  }
+  const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+  state.exportDirectoryHandle = handle;
+  state.exportDirectoryName = handle.name || "";
+  renderExportControls();
+  log(`書き出し先を選択しました: ${state.exportDirectoryName || "選択済みフォルダ"}`);
+}
+
+async function ensureExportFolderPermission(handle) {
+  if (!handle) {
+    return;
+  }
+  if (typeof handle.queryPermission === "function") {
+    const current = await handle.queryPermission({ mode: "readwrite" });
+    if (current === "granted") {
+      return;
+    }
+  }
+  if (typeof handle.requestPermission === "function") {
+    const requested = await handle.requestPermission({ mode: "readwrite" });
+    if (requested !== "granted") {
+      throw new Error("書き出し先フォルダへの保存が許可されませんでした。もう一度フォルダを選択してください。");
+    }
+  }
+}
+
+async function exportSelectedClips() {
+  if (!state.exportClips?.length) {
+    log("書き出しできる分割素材がありません。先に生成してください。", "warn");
+    return;
+  }
+  if (!state.exportDirectoryHandle) {
+    await chooseExportFolder();
+  }
+  await ensureExportFolderPermission(state.exportDirectoryHandle);
+  elements.exportButton.disabled = true;
+  elements.exportButton.textContent = "書き出し中";
+  try {
+    for (const clip of state.exportClips) {
+      const response = await fetch(clip.url);
+      if (!response.ok) {
+        throw new Error("分割素材を読み込めません。もう一度生成してください。");
+      }
+      const fileHandle = await state.exportDirectoryHandle.getFileHandle(clip.name, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(await response.blob());
+      await writable.close();
+    }
+    log(`分割素材を書き出しました: ${state.exportClips.length}本`);
+  } finally {
+    renderExportControls();
+  }
+}
+
+async function generateVoice() {
+  const text = elements.voiceText.value.trim();
+  elements.voiceGenerateButton.disabled = true;
+  elements.voiceGenerateButton.textContent = "生成中";
+  elements.voiceMeta.textContent = "音声生成中";
+  try {
+    const result = await api("/api/voice/generate", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    });
+    state.voice = {
+      ...(state.voice || {}),
+      configured: true,
+      api_key_configured: true,
+      voice_id_configured: true,
+      audio_exists: true,
+      audio_path: result.audio_path,
+      timestamps_path: result.timestamps_path,
+      audio_url: result.audio_url,
+    };
+    renderVoice();
+    log(`${result.message}: ${result.audio_path}`);
+  } catch (error) {
+    elements.voiceMeta.textContent = error.message;
+    log(error.message, "error");
+  } finally {
+    elements.voiceGenerateButton.disabled = false;
+    elements.voiceGenerateButton.textContent = "音声生成";
+  }
+}
+
+async function mergeTimestamps() {
+  elements.mergeTimestampsButton.disabled = true;
+  elements.mergeTimestampsButton.textContent = "結合中";
+  elements.voiceMeta.textContent = "timestamps結合中";
+  try {
+    const result = await api("/api/script/merge-timestamps", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    const timelineData = await api("/api/timeline");
+    state.timeline = timelineData.timeline;
+    renderTimeline();
+    elements.voiceMeta.textContent = `${result.script_path} / ${result.timeline_path}`;
+    log(`${result.message}: ${result.segment_count} segments`);
+  } catch (error) {
+    elements.voiceMeta.textContent = error.message;
+    log(error.message, "error");
+  } finally {
+    elements.mergeTimestampsButton.disabled = false;
+    elements.mergeTimestampsButton.textContent = "timestamps結合";
+  }
 }
 
 async function saveTemplate() {
@@ -347,6 +609,7 @@ async function renderRoughCut() {
     });
     state.timeline = data.timeline;
     state.outputExists = true;
+    state.exportClips = data.exportClips || [];
     for (const warning of data.warnings || []) {
       log(warning, "warn");
     }
@@ -364,7 +627,13 @@ function setBusy(isBusy) {
   elements.renderButton.disabled = isBusy;
   elements.saveButton.disabled = isBusy;
   elements.reloadButton.disabled = isBusy;
+  elements.importJsonButton.disabled = isBusy;
+  elements.voiceGenerateButton.disabled = isBusy;
+  elements.mergeTimestampsButton.disabled = isBusy;
+  elements.exportFolderButton.disabled = isBusy;
+  elements.exportButton.disabled = isBusy || !state.exportClips?.length;
   elements.renderButton.textContent = isBusy ? "生成中" : "生成";
+  elements.exportButton.textContent = isBusy ? "書き出し" : (state.exportClips?.length ? `書き出し (${state.exportClips.length})` : "書き出し");
   elements.projectStatus.textContent = isBusy ? "生成中" : `${state.templateName} / ${state.assets?.count || 0} assets`;
 }
 
@@ -377,6 +646,47 @@ elements.saveButton.addEventListener("click", () => {
 });
 
 elements.renderButton.addEventListener("click", renderRoughCut);
+
+elements.voiceGenerateButton.addEventListener("click", () => {
+  generateVoice().catch((error) => log(error.message, "error"));
+});
+
+elements.mergeTimestampsButton.addEventListener("click", () => {
+  mergeTimestamps().catch((error) => log(error.message, "error"));
+});
+
+elements.exportFolderButton.addEventListener("click", () => {
+  chooseExportFolder().catch((error) => log(error.message, "error"));
+});
+
+elements.importJsonButton.addEventListener("click", () => {
+  elements.jsonFileInput.click();
+});
+
+elements.jsonFileInput.addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) {
+    return;
+  }
+  try {
+    await importTemplateJson(file);
+  } catch (error) {
+    log(error.message, "error");
+  }
+});
+
+elements.exportButton.addEventListener("click", () => {
+  exportSelectedClips().catch((error) => log(error.message, "error"));
+});
+
+elements.packList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-action='install-pack']");
+  if (!button || button.disabled) {
+    return;
+  }
+  installAssetPack(button.dataset.packId).catch((error) => log(error.message, "error"));
+});
 
 elements.templateSelect.addEventListener("change", async (event) => {
   state.templateName = event.target.value;
