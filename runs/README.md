@@ -20,3 +20,5 @@ Do not use old logs with unclear chronology, such as `output/roughcut_command_lo
 - `selected_clips.json`
 
 If a current artifact no longer matches the captured run, record that as a warning instead of rewriting history.
+
+When reviewing asset choices, use `.agents/skills/picoedit-asset-selection/SKILL.md` as the judgment guide. Record whether each asset matched the segment role/emotion or only matched a spoken keyword, and note long-segment loop quality when relevant.
