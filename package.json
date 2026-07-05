@@ -4,7 +4,8 @@
   "private": true,
   "description": "Local rough-cut web app for vertical short videos.",
   "scripts": {
-    "start": "node server.js"
+    "start": "node scripts/start_picoedit.js",
+    "start:legacy": "node server.js"
   },
   "engines": {
     "node": ">=20"
