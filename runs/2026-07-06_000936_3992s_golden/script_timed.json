@@ -1,0 +1,184 @@
+{
+  "id": "derived_from_elevenlabs_timestamps",
+  "segments": [
+    {
+      "id": "segment_01",
+      "text": "ChatGPTはたまに使える便利な検索ツールだと思っていませんか？",
+      "segment_id": "segment_01",
+      "slot_id": "segment_01",
+      "label": "ChatGPTはたまに使える便利な検索ツールだと思っていませんか？",
+      "start": 0,
+      "end": 5.76,
+      "duration": 5.76,
+      "duration_sec": 5.76,
+      "asset": "",
+      "speed": 1,
+      "caption": {
+        "text": "ChatGPTはたまに使える便利な検索ツールだと思っていませんか？",
+        "start": 0,
+        "end": 5.76,
+        "duration_sec": 5.76
+      },
+      "video_slot": {
+        "text": "segment_01",
+        "start": 0,
+        "end": 5.76,
+        "duration_sec": 5.76
+      }
+    },
+    {
+      "id": "segment_02",
+      "text": "実はその使い方、すごく損をしています",
+      "segment_id": "segment_02",
+      "slot_id": "segment_02",
+      "label": "実はその使い方、すごく損をしています",
+      "start": 5.76,
+      "end": 9.68,
+      "duration": 3.92,
+      "duration_sec": 3.92,
+      "asset": "",
+      "speed": 1,
+      "caption": {
+        "text": "実はその使い方、すごく損をしています",
+        "start": 5.76,
+        "end": 9.68,
+        "duration_sec": 3.92
+      },
+      "video_slot": {
+        "text": "segment_02",
+        "start": 5.76,
+        "end": 9.68,
+        "duration_sec": 3.92
+      }
+    },
+    {
+      "id": "segment_03",
+      "text": "でも、いざちゃんと使おうと思うと、なんて質問したらいいか迷いますよね？",
+      "segment_id": "segment_03",
+      "slot_id": "segment_03",
+      "label": "でも、いざちゃんと使おうと思うと、なんて質問したらいいか迷いますよね？",
+      "start": 9.68,
+      "end": 15.44,
+      "duration": 5.76,
+      "duration_sec": 5.76,
+      "asset": "",
+      "speed": 1,
+      "caption": {
+        "text": "でも、いざちゃんと使おうと思うと、なんて質問したらいいか迷いますよね？",
+        "start": 9.68,
+        "end": 15.44,
+        "duration_sec": 5.76
+      },
+      "video_slot": {
+        "text": "segment_03",
+        "start": 9.68,
+        "end": 15.44,
+        "duration_sec": 5.76
+      }
+    },
+    {
+      "id": "segment_04",
+      "text": "そこで、自分で質問するのではなく、逆にChatGPTに質問をしてもらいます",
+      "segment_id": "segment_04",
+      "slot_id": "segment_04",
+      "label": "そこで、自分で質問するのではなく、逆にChatGPTに質問をしてもらいます",
+      "start": 15.44,
+      "end": 22.56,
+      "duration": 7.12,
+      "duration_sec": 7.12,
+      "asset": "",
+      "speed": 1,
+      "caption": {
+        "text": "そこで、自分で質問するのではなく、逆にChatGPTに質問をしてもらいます",
+        "start": 15.44,
+        "end": 22.56,
+        "duration_sec": 7.12
+      },
+      "video_slot": {
+        "text": "segment_04",
+        "start": 15.44,
+        "end": 22.56,
+        "duration_sec": 7.12
+      }
+    },
+    {
+      "id": "segment_05",
+      "text": "実はこの使い方、少し前まで上級者の方が使っていた方法で、自分に合った柔軟な回答を得られやすいということでおおバズリしました。",
+      "segment_id": "segment_05",
+      "slot_id": "segment_05",
+      "label": "実はこの使い方、少し前まで上級者の方が使っていた方法で、自分に合った柔軟な回答を得られやすいということでおおバズリしました。",
+      "start": 22.56,
+      "end": 33.4,
+      "duration": 10.84,
+      "duration_sec": 10.84,
+      "asset": "",
+      "speed": 1,
+      "caption": {
+        "text": "実はこの使い方、少し前まで上級者の方が使っていた方法で、自分に合った柔軟な回答を得られやすいということでおおバズリしました。",
+        "start": 22.56,
+        "end": 33.4,
+        "duration_sec": 10.84
+      },
+      "video_slot": {
+        "text": "segment_05",
+        "start": 22.56,
+        "end": 33.4,
+        "duration_sec": 10.84
+      }
+    },
+    {
+      "id": "segment_06",
+      "text": "今でも一部の上級者の方はこの使い方をしているので、超！おすすめ！",
+      "segment_id": "segment_06",
+      "slot_id": "segment_06",
+      "label": "今でも一部の上級者の方はこの使い方をしているので、超！おすすめ！",
+      "start": 33.4,
+      "end": 38.92,
+      "duration": 5.52,
+      "duration_sec": 5.52,
+      "asset": "",
+      "speed": 1,
+      "caption": {
+        "text": "今でも一部の上級者の方はこの使い方をしているので、超！おすすめ！",
+        "start": 33.4,
+        "end": 38.92,
+        "duration_sec": 5.52
+      },
+      "video_slot": {
+        "text": "segment_06",
+        "start": 33.4,
+        "end": 38.92,
+        "duration_sec": 5.52
+      }
+    },
+    {
+      "id": "segment_07",
+      "text": "やり方はこうです！",
+      "segment_id": "segment_07",
+      "slot_id": "segment_07",
+      "label": "やり方はこうです！",
+      "start": 38.92,
+      "end": 39.92,
+      "duration": 1,
+      "duration_sec": 1,
+      "asset": "",
+      "speed": 1,
+      "caption": {
+        "text": "やり方はこうです！",
+        "start": 38.92,
+        "end": 39.92,
+        "duration_sec": 1
+      },
+      "video_slot": {
+        "text": "segment_07",
+        "start": 38.92,
+        "end": 39.92,
+        "duration_sec": 1
+      }
+    }
+  ],
+  "audio_path": "input/voice.mp3",
+  "timestamps_path": "output/elevenlabs_timestamps.json",
+  "duration_sec": 39.92,
+  "generated_at": "2026-07-05T15:10:16.711Z"
+}

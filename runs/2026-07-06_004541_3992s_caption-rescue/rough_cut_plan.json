@@ -1,0 +1,103 @@
+{
+  "ok": true,
+  "source_timeline": "output/timeline_with_captions.json",
+  "source_manifest": "output/asset_manifest_for_renderer.json",
+  "output": "output/rough_cut.mp4",
+  "recognized_video_count": 34,
+  "segment_count": 7,
+  "expected_duration": 39.92,
+  "audio_duration": 39.92,
+  "rough_cut_duration": 39.92,
+  "duration_diff": 0,
+  "width": 1080,
+  "height": 1920,
+  "fps": "30/1",
+  "caption_cue_count": 18,
+  "captions": "output/rough_cut_captions.ass",
+  "assignments": [
+    {
+      "segment_id": "segment_01",
+      "role": "hook",
+      "start": 0,
+      "end": 5.76,
+      "duration_sec": 5.76,
+      "asset_path": "assets/core_ai_education/hook/ai_context_chatgpt_icon_typing_001.mp4",
+      "source_duration": 6.041667,
+      "render_mode": "trim",
+      "clip": "output/roughcut_segment_01.mp4",
+      "selected_clip": "output/selected_clips/01_segment_01.mp4"
+    },
+    {
+      "segment_id": "segment_02",
+      "role": "problem",
+      "start": 5.76,
+      "end": 9.68,
+      "duration_sec": 3.92,
+      "asset_path": "assets/core_ai_education/problem/negative_future_hourglass_falling_005.mp4",
+      "source_duration": 6.041667,
+      "render_mode": "trim",
+      "clip": "output/roughcut_segment_02.mp4",
+      "selected_clip": "output/selected_clips/02_segment_02.mp4"
+    },
+    {
+      "segment_id": "segment_03",
+      "role": "explain",
+      "start": 9.68,
+      "end": 15.44,
+      "duration_sec": 5.76,
+      "asset_path": "assets/core_ai_education/explain/pc_work_code_aligning_017.mp4",
+      "source_duration": 6.041667,
+      "render_mode": "trim",
+      "clip": "output/roughcut_segment_03.mp4",
+      "selected_clip": "output/selected_clips/03_segment_03.mp4"
+    },
+    {
+      "segment_id": "segment_04",
+      "role": "explain",
+      "start": 15.44,
+      "end": 22.56,
+      "duration_sec": 7.12,
+      "asset_path": "assets/core_ai_education/explain/main_bg_chatgpt_workspace_001.mp4",
+      "source_duration": 14.066667,
+      "render_mode": "trim",
+      "clip": "output/roughcut_segment_04.mp4",
+      "selected_clip": "output/selected_clips/04_segment_04.mp4"
+    },
+    {
+      "segment_id": "segment_05",
+      "role": "proof",
+      "start": 22.56,
+      "end": 33.4,
+      "duration_sec": 10.84,
+      "asset_path": "assets/core_ai_education/proof/result_light_glowing_book_shining_011.mp4",
+      "source_duration": 6.041667,
+      "render_mode": "loop",
+      "clip": "output/roughcut_segment_05.mp4",
+      "selected_clip": "output/selected_clips/05_segment_05.mp4"
+    },
+    {
+      "segment_id": "segment_06",
+      "role": "explain",
+      "start": 33.4,
+      "end": 38.92,
+      "duration_sec": 5.52,
+      "asset_path": "assets/core_ai_education/explain/pc_work_desk_hands_typing_014.mp4",
+      "source_duration": 6.041667,
+      "render_mode": "trim",
+      "clip": "output/roughcut_segment_06.mp4",
+      "selected_clip": "output/selected_clips/06_segment_06.mp4"
+    },
+    {
+      "segment_id": "segment_07",
+      "role": "cta",
+      "start": 38.92,
+      "end": 39.92,
+      "duration_sec": 1,
+      "asset_path": "assets/core_ai_education/cta/cta_caption_luxury_car_getting_in_032.mp4",
+      "source_duration": 3.033333,
+      "render_mode": "trim",
+      "clip": "output/roughcut_segment_07.mp4",
+      "selected_clip": "output/selected_clips/07_segment_07.mp4"
+    }
+  ]
+}

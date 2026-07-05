@@ -5,6 +5,9 @@ const root = path.resolve(__dirname, "..");
 const timelinePath = path.join(root, "output", "timeline.json");
 const timestampsPath = path.join(root, "output", "elevenlabs_timestamps.json");
 const outputPath = path.join(root, "output", "timeline_with_captions.json");
+const minCaptionDurationSec = 1.2;
+const maxCaptionDurationSec = 3.4;
+const maxCaptionJoinGapSec = 0.05;
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, ""));
@@ -207,6 +210,68 @@ function rebuildCue(cues, index) {
   };
 }
 
+function boundaryGap(left, right) {
+  if (!left || !right) {
+    return null;
+  }
+  return roundTime(Number(right.start) - Number(left.end));
+}
+
+function canJoinCues(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+  const gap = boundaryGap(left, right);
+  const duration = roundTime(Number(right.end) - Number(left.start));
+  const text = normalizeDisplayText(`${left.text || ""}${right.text || ""}`);
+  return Math.abs(gap) <= maxCaptionJoinGapSec && duration <= maxCaptionDurationSec && text.length > 0;
+}
+
+function renumberCues(cues) {
+  return cues.map((cue, cueIndex) => ({ ...cue, id: `caption_${String(cueIndex + 1).padStart(3, "0")}` }));
+}
+
+function shortCueError(cue, previous, next) {
+  return [
+    "短尺字幕cueを安全に結合できません",
+    `cue=${cue.id}`,
+    `text=${JSON.stringify(cue.text || "")}`,
+    `start=${cue.start}`,
+    `end=${cue.end}`,
+    `duration=${cue.duration_sec}`,
+    `previous_gap=${previous ? boundaryGap(previous, cue) : "none"}`,
+    `next_gap=${next ? boundaryGap(cue, next) : "none"}`,
+  ].join(" ");
+}
+
+function rescueShortCaptionCues(cues) {
+  const result = [...cues];
+  for (let index = 0; index < result.length; index += 1) {
+    const cue = result[index];
+    const isLast = index === result.length - 1;
+    if (isLast || Number(cue.duration_sec) >= minCaptionDurationSec) {
+      continue;
+    }
+
+    const previous = result[index - 1];
+    const next = result[index + 1];
+    if (canJoinCues(previous, cue)) {
+      result.splice(index - 1, 2, rebuildCue([previous, cue], index - 1));
+      index = Math.max(-1, index - 2);
+      continue;
+    }
+
+    if (canJoinCues(cue, next)) {
+      result.splice(index, 2, rebuildCue([cue, next], index));
+      index = Math.max(-1, index - 1);
+      continue;
+    }
+
+    throw new Error(shortCueError(cue, previous, next));
+  }
+  return renumberCues(result);
+}
+
 function postProcessCues(cues) {
   const result = [];
   let index = 0;
@@ -232,11 +297,11 @@ function postProcessCues(cues) {
 
   const last = result[result.length - 1];
   const previous = result[result.length - 2];
-  if (last && previous && last.duration_sec < 1.2 && roundTime(last.end - previous.start) <= 3.4) {
+  if (last && previous && last.duration_sec < minCaptionDurationSec && roundTime(last.end - previous.start) <= maxCaptionDurationSec) {
     result.splice(result.length - 2, 2, rebuildCue([previous, last], result.length - 2));
   }
 
-  return result.map((cue, cueIndex) => ({ ...cue, id: `caption_${String(cueIndex + 1).padStart(3, "0")}` }));
+  return rescueShortCaptionCues(renumberCues(result));
 }
 
 function makeCaptionCues(timestamps) {
@@ -288,9 +353,13 @@ function validate(timeline, cues, timestamps) {
   }
   const badDuration = cues.find((cue, index) => {
     const isLast = index === cues.length - 1;
-    return cue.duration_sec > 3.4 || (!isLast && cue.duration_sec < 1.2);
+    return cue.duration_sec > maxCaptionDurationSec || (!isLast && cue.duration_sec < minCaptionDurationSec);
   });
   if (badDuration) {
+    const badIndex = cues.indexOf(badDuration);
+    if (badIndex >= 0 && badIndex < cues.length - 1 && badDuration.duration_sec < minCaptionDurationSec) {
+      throw new Error(shortCueError(badDuration, cues[badIndex - 1], cues[badIndex + 1]));
+    }
     throw new Error(`字幕尺が範囲外です: ${badDuration.id} ${badDuration.duration_sec}`);
   }
   const tooManyLines = cues.find((cue) => cue.lines.length > 2);

@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "expected_video_count": 34,
+  "video_count": 34,
+  "missing_count": 0,
+  "unknown_role_count": 0,
+  "roles": {
+    "hook": 15,
+    "problem": 3,
+    "explain": 6,
+    "proof": 3,
+    "cta": 7
+  },
+  "output_manifest": "output/asset_manifest_for_renderer.json",
+  "missing": []
+}

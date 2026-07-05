@@ -1,0 +1,65 @@
+{
+  "run_id": "2026-07-06_000936_3992s_golden",
+  "created_at": "2026-07-06T00:09:36+09:00",
+  "captured_at": "2026-07-06T00:12:18.3423405+09:00",
+  "git_commit": "d99714eb4925c1e24cf5155d9ba766972b231fbf",
+  "source_script": "derived_from_elevenlabs_timestamps",
+  "status": "needs_revalidation",
+  "failed_stage": "caption_cues_generation",
+  "failure": {
+    "command": "node scripts/generate_caption_cues.js",
+    "exit_code": 1,
+    "log": "runs/2026-07-06_000936_3992s_golden/caption_generation_error.txt",
+    "message": "字幕尺が範囲外です: caption_010 0.96"
+  },
+  "voice": {
+    "path_at_capture": "input/voice.mp3",
+    "archived_copy": "runs/2026-07-06_000936_3992s_golden/input/voice.mp3",
+    "duration_sec": 39.92,
+    "size_bytes": 639939,
+    "mtime_iso": "2026-07-05T13:47:54.0367109Z",
+    "sha256": "23a480a3d03e1117c412b1a5d504305390bea55b6139930bc96d0eb0a0794660"
+  },
+  "timeline": {
+    "path": "output/timeline.json",
+    "copied_to": "runs/2026-07-06_000936_3992s_golden/timeline.json",
+    "segment_count": 7,
+    "final_segment_end_sec": 39.92,
+    "voice_to_segment_diff_sec": 0
+  },
+  "timeline_with_captions": {
+    "status": "not_generated_for_this_run",
+    "stale_copy": "runs/2026-07-06_000936_3992s_golden/timeline_with_captions_stale.json",
+    "stale_final_segment_end_sec": 42.96,
+    "stale_final_caption_end_sec": 42.96,
+    "stale_voice_to_segment_diff_sec": 3.04,
+    "stale_voice_to_caption_diff_sec": 3.04
+  },
+  "assets": {
+    "manifest_path": "output/asset_manifest_for_renderer.json",
+    "recognized_video_count": null,
+    "missing_count": null,
+    "status": "not_run"
+  },
+  "render": {
+    "selected_clip_count": null,
+    "rough_cut_path": null,
+    "duration_sec": null,
+    "sha256": null,
+    "status": "not_run"
+  },
+  "quality": {
+    "status": "needs_revalidation",
+    "voice_to_segment_diff_sec": 0,
+    "voice_to_caption_diff_sec": null,
+    "voice_to_render_diff_sec": null,
+    "segment_to_render_diff_sec": null,
+    "notes": [
+      "The source voice was archived before running the production path.",
+      "merge-timestamps produced a 39.92s timeline with 7 segments.",
+      "caption cue generation failed before a new timeline_with_captions.json could be created.",
+      "Existing 42.96s timeline_with_captions and render artifacts are stale and are not part of this run.",
+      "No selected_clips or rough_cut.mp4 were generated for this run."
+    ]
+  }
+}
